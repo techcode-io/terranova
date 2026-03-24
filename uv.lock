@@ -640,7 +640,6 @@ name = "terranova"
 version = "0.6.7.dev0"
 source = { editable = "." }
 dependencies = [
-    { name = "basedpyright" },
     { name = "click" },
     { name = "envyaml" },
     { name = "jinja2" },
@@ -655,6 +654,7 @@ build = [
     { name = "pyinstaller" },
 ]
 dev = [
+    { name = "basedpyright" },
     { name = "licenseheaders" },
     { name = "poethepoet" },
     { name = "pytest" },
@@ -665,7 +665,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "basedpyright", specifier = ">=1.38.3" },
     { name = "click", specifier = ">=8.1.8" },
     { name = "envyaml", specifier = ">=1.10.211231" },
     { name = "jinja2", specifier = ">=3.1.6" },
@@ -678,6 +677,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.13.0" }]
 dev = [
+    { name = "basedpyright", specifier = ">=1.38.3" },
     { name = "licenseheaders", specifier = ">=0.8.8" },
     { name = "poethepoet", specifier = ">=0.33.1" },
     { name = "pytest", specifier = ">=8.3.5" },
