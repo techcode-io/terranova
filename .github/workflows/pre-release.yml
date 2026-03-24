@@ -23,26 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
-      - name: Get token
-        id: get-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OBS_AUTOMATION_APP_ID }}
-          private-key: ${{ secrets.OBS_AUTOMATION_APP_PEM }}
-          permission-contents: write
-          permission-pull-requests: write
-          repositories: |
-            terranova
-
-      - uses: elastic/oblt-actions/git/setup@v1
-        with:
-          github-token: ${{ steps.get-token.outputs.token }}
-
       - uses: actions/checkout@v6
         with:
-          token: ${{ steps.get-token.outputs.token }}
           fetch-depth: 0
+
+      - name: Setup github actions bot
+        uses: ./.github/workflows/setup-github-bot
 
       - name: Install environment
         uses: ./.github/workflows/env-install
@@ -50,5 +38,5 @@ jobs:
       - name: Run pre-release step
         run: uv run poe release:pre
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ steps.get-token.outputs.token }}

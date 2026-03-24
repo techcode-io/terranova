@@ -4,12 +4,14 @@
   <i align="center">Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale.</i>
 </p>
 
+> **Note**: This is a fork of [elastic/terranova](https://github.com/elastic/terranova). See the [original repository](https://github.com/elastic/terranova) for the upstream source.
+
 <h4 align="center">
-  <a href="[https://github.com/elastic/terranova/actions/workflows/ci.yml](https://github.com/elastic/terranova/actions/workflows/ci.yml)">
-    <img src="https://img.shields.io/github/actions/workflow/status/elastic/terranova/ci.yml?branch=main&label=ci&style=flat-square" alt="continuous integration" style="height: 20px;">
+  <a href="https://github.com/techcode-io/terranova/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/techcode-io/terranova/ci.yml?branch=main&label=ci&style=flat-square" alt="continuous integration" style="height: 20px;">
   </a>
-  <a href="https://github.com/elastic/terranova/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors-anon/elastic/terranova?color=yellow&style=flat-square" alt="contributors" style="height: 20px;">
+  <a href="https://github.com/techcode-io/terranova/graphs/contributors">
+    <img src="https://img.shields.io/github/contributors-anon/techcode-io/terranova?color=yellow&style=flat-square" alt="contributors" style="height: 20px;">
   </a>
   <a href="https://opensource.org/licenses/Apache-2.0">
     <img src="https://img.shields.io/badge/apache%202.0-blue.svg?style=flat-square&label=license" alt="license" style="height: 20px;">
@@ -17,10 +19,10 @@
   <br>
 </h4>
 
-- [Source](https://github.com/elastic/terranova)
-- [Documentation](https://github.com/elastic/terranova)
-- [Issues](https://github.com/elastic/terranova/issues)
-- [Contact](mailto:adrien.mannocci@elastic.co)
+- [Source](https://github.com/techcode-io/terranova)
+- [Documentation](https://github.com/techcode-io/terranova)
+- [Issues](https://github.com/techcode-io/terranova/issues)
+- [Contact](mailto:adrien.mannocci@gmail.com)
 
 ## :package: Prerequisites
 
@@ -51,7 +53,7 @@ The following steps will ensure your project is cloned properly.
 
 1. Clone repository:
    ```shell
-   git clone https://github.com/elastic/terranova
+   git clone https://github.com/techcode-io/terranova
    cd terranova
    ```
 2. Install dependencies and setup environment:
@@ -82,26 +84,16 @@ uv run poe fmt
 
 ## 📖 Usage
 
-### How to install it using Brew
-
-```bash
-# Install custom terranova tap
-brew tap elastic/terranova
-
-# Install terranova
-brew install terranova
-```
-
 ### Single-line installation
 
 ```shell
-curl -sSL https://raw.githubusercontent.com/elastic/terranova/0.6.5/install.sh | sh -s
+curl -sSL https://raw.githubusercontent.com/techcode-io/terranova/0.6.5/install.sh | sh -s
 ```
 
 If you use `wget` instead:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/elastic/terranova/0.6.5/install.sh | sh -s
+wget -qO- https://raw.githubusercontent.com/techcode-io/terranova/0.6.5/install.sh | sh -s
 ```
 
 That will download `terranova`, put it inside `/usr/local/bin/` and give it execution rights with `chmod`.
@@ -110,16 +102,16 @@ That will download `terranova`, put it inside `/usr/local/bin/` and give it exec
 
 ```bash
 # For MacOSX Apple Silicon
-gh release download 0.6.5 -p '*-darwin-arm64' -O /usr/local/bin/terranova --clobber --repo elastic/terranova
+gh release download 0.6.5 -p '*-darwin-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For MacOSX Intel
-gh release download 0.6.5 -p '*-darwin-amd64' -O /usr/local/bin/terranova --clobber --repo elastic/terranova
+gh release download 0.6.5 -p '*-darwin-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For Linux arm64
-gh release download 0.6.5 -p '*-linux-arm64' -O /usr/local/bin/terranova --clobber --repo elastic/terranova
+gh release download 0.6.5 -p '*-linux-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For Linux amd64
-gh release download 0.6.5 -p '*-linux-amd64' -O /usr/local/bin/terranova --clobber --repo elastic/terranova
+gh release download 0.6.5 -p '*-linux-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # Make it executable
 chmod +x /usr/local/bin/terranova
@@ -168,8 +160,8 @@ version: "1.2"
 metadata:
   name: Terranova Hello World
   description: Hello World
-  url: https://github.com/elastic/terranova
-  contact: mailto:adrien.mannocci@elastic.co
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com
 ```
 
 - Define any resource using standard `terraform` configuration.
@@ -261,8 +253,8 @@ notifications about new versions, and give it a :star2: **GitHub Star**!
 
 You can also contribute by:
 
-- Sending a [Pull Request](https://github.com/elastic/terranova/pulls) with your awesome new features and bug fixed.
-- Be part of the community and help resolve [Issues](https://github.com/elastic/terranova/issues).
+- Sending a [Pull Request](https://github.com/techcode-io/terranova/pulls) with your awesome new features and bug fixed.
+- Be part of the community and help resolve [Issues](https://github.com/techcode-io/terranova/issues).
 
 ## 🧾 License
 
