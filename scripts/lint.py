@@ -35,7 +35,7 @@ def check_ruff() -> None:
     print("Checking codebase")
     try:
         ruff = detect_ruff()
-        ruff.args("check", "terranova").inherit_out().exec()
+        ruff.args("check", "src/terranova").inherit_out().exec()
     except ErrorReturnCode as err:
         # Forward exit code without traceback
         sys.exit(err.exit_code)
