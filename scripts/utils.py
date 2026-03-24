@@ -32,8 +32,7 @@ class Constants:
     PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
     PYRIGHTCONFIG_PATH: Final[Path] = Path("pyrightconfig.json")
     REGISTRY_URL: str = os.getenv("REGISTRY_URL", "local.dev")
-    TERRANOVA_INIT_PATH: Final[Path] = Path("./terranova/__init__.py")
-    INSTALL_PATH: Final[Path] = Path("install.sh")
+    TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")
 
 
 def fatal(msg: str, err: Exception | None = None) -> NoReturn:
