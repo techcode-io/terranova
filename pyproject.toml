@@ -3,7 +3,7 @@ name = "terranova"
 version = "0.6.7-dev"
 description = "Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale."
 authors = [
-  { name = "Adrien Mannocci", email = "adrien.mannocci@elastic.co" }
+  { name = "Adrien Mannocci", email = "adrien.mannocci@gmail.com" }
 ]
 license = { text = "Apache-2.0" }
 readme = "README.md"
@@ -23,9 +23,9 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/elastic/terranova"
-Documentation = "https://github.com/elastic/terranova"
-Tracker = "https://github.com/elastic/terranova/issues"
+Repository = "https://github.com/techcode-io/terranova"
+Documentation = "https://github.com/techcode-io/terranova"
+Tracker = "https://github.com/techcode-io/terranova/issues"
 
 [project.scripts]
 terranova = "terranova.cli:main"
@@ -35,7 +35,7 @@ requires = ["uv_build>=0.10.0,<0.12.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-root = ""
+module-root = "src"
 module-name = "terranova"
 
 [dependency-groups]
@@ -56,7 +56,7 @@ dev = [
 default-groups = ["dev", "build"]
 
 [tool.pyright] # Ref: https://zed.dev/docs/languages/python#virtual-environments
-include = ["terranova", "scripts"]
+include = ["src/terranova", "scripts"]
 pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
@@ -78,7 +78,7 @@ sequence = [
 help = "Add license header in codebase."
 sequence = [
     { cmd = "licenseheaders -t .copyright.tmpl -d scripts" },
-    { cmd = "licenseheaders -t .copyright.tmpl -d terranova --exclude terranova/templates/resources.md" },
+    { cmd = "licenseheaders -t .copyright.tmpl -d src/terranova --exclude src/terranova/templates/resources.md" },
 ]
 
 [tool.poe.tasks."env:wipe"]
