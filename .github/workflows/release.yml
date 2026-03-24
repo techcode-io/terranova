@@ -28,8 +28,10 @@ jobs:
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     permissions:
-      id-token: write
+      artifact-metadata: write
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
