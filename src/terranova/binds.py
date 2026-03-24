@@ -28,6 +28,9 @@ class Terraform(Bind):
 
     def __init__(self, work_dir: Path, variables: dict[str, str] | None = None) -> None:
         """Init terraform bind."""
+        self.__work_dir = work_dir
+        self.__variables = variables
+
         try:
             super().__init__("terraform")
         except CommandNotFound as err:
@@ -39,9 +42,6 @@ class Terraform(Bind):
             )
         except OSError as err:
             Log.fatal("create terraform cache directory", err)
-
-        self.__work_dir = work_dir
-        self.__variables = variables
 
     @override
     def create(self, cmd_path: str | Path) -> Command:
