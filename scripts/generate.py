@@ -32,9 +32,9 @@ def run() -> None:
     args.extend(
         [
             "--add-data",
-            "terranova/schemas/:terranova/schemas/",
+            "src/terranova/schemas/:terranova/schemas/",
             "--add-data",
-            "terranova/templates/:terranova/templates/",
+            "src/terranova/templates/:terranova/templates/",
             "./bin/terranova",
         ]
     )
