@@ -111,6 +111,10 @@ def init(
                 for dependency in manifest.dependencies:
                     try:
                         target_dirname = os.path.dirname(dependency.target)
+                        # Ensure parent directories exist
+                        if target_dirname:
+                            target_parent = full_path / target_dirname
+                            target_parent.mkdir(parents=True, exist_ok=True)
                         os.symlink(
                             os.path.relpath(
                                 SharedContext.shared_dir()
@@ -136,13 +140,6 @@ def init(
                         dir_path.rmdir()
             except OSError:
                 Log.fatal(f"delete the directory at: {dir_path.as_posix()}")
-
-        # Ensure runbooks directory exists
-        runbooks_dir = full_path / "runbooks"
-        try:
-            runbooks_dir.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            Log.fatal(f"create the runbooks directory at: {runbooks_dir.as_posix()}")
 
         try:
             # Mount terraform context
