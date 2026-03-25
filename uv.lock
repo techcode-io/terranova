@@ -637,7 +637,7 @@ wheels = [
 
 [[package]]
 name = "terranova"
-version = "0.6.7.dev0"
+version = "0.7.1.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
