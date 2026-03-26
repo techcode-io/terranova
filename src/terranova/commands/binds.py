@@ -110,11 +110,11 @@ def init(
             if manifest.dependencies:
                 for dependency in manifest.dependencies:
                     try:
-                        target_dirname = os.path.dirname(dependency.target)
                         # Ensure parent directories exist
+                        target_dirname = os.path.dirname(dependency.target)
                         if target_dirname:
-                            target_parent = full_path / target_dirname
-                            target_parent.mkdir(parents=True, exist_ok=True)
+                            os.makedirs(target_dirname, exist_ok=True)
+
                         os.symlink(
                             os.path.relpath(
                                 SharedContext.shared_dir()
