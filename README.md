@@ -87,13 +87,13 @@ uv run poe fmt
 ### Single-line installation
 
 ```shell
-curl -sSL https://raw.githubusercontent.com/techcode-io/terranova/0.6.5/install.sh | sh -s
+curl -sSL https://raw.githubusercontent.com/techcode-io/terranova/0.7.0/install.sh | sh -s
 ```
 
 If you use `wget` instead:
 
 ```shell
-wget -qO- https://raw.githubusercontent.com/techcode-io/terranova/0.6.5/install.sh | sh -s
+wget -qO- https://raw.githubusercontent.com/techcode-io/terranova/0.7.0/install.sh | sh -s
 ```
 
 That will download `terranova`, put it inside `/usr/local/bin/` and give it execution rights with `chmod`.
@@ -102,16 +102,16 @@ That will download `terranova`, put it inside `/usr/local/bin/` and give it exec
 
 ```bash
 # For MacOSX Apple Silicon
-gh release download 0.6.5 -p '*-darwin-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download 0.7.0 -p '*-darwin-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For MacOSX Intel
-gh release download 0.6.5 -p '*-darwin-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download 0.7.0 -p '*-darwin-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For Linux arm64
-gh release download 0.6.5 -p '*-linux-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download 0.7.0 -p '*-linux-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # For Linux amd64
-gh release download 0.6.5 -p '*-linux-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download 0.7.0 -p '*-linux-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
 
 # Make it executable
 chmod +x /usr/local/bin/terranova
