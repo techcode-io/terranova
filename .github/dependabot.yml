@@ -33,12 +33,13 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: pre-commit
+  - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
       interval: 'weekly'
       day: 'sunday'
       time: '22:00'
-    open-pull-requests-limit: 5
-    labels:
-      - 'changelog:dependencies'
+    groups:
+      pre-commit:
+        patterns:
+          - "*"
