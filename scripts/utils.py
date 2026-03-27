@@ -104,7 +104,7 @@ def detect_pyinstaller() -> Command:
         fatal("`pyinstaller` isn't installed")
 
 
-def detect_pre_commit() -> Command | None:
+def detect_pre_commit() -> Command:
     """
     Try to detect pre-commit.
     Returns:
@@ -113,7 +113,7 @@ def detect_pre_commit() -> Command | None:
     try:
         return Command("pre-commit")
     except CommandNotFound:
-        return None
+        fatal("`pre-commit` isn't installed")
 
 
 def project_version() -> str:

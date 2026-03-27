@@ -20,9 +20,5 @@ from scripts.utils import detect_pre_commit
 
 
 def configure() -> None:
-    # Skip pre-commit if not present
     pre_commit = detect_pre_commit()
-    if pre_commit:
-        pre_commit.args("install").inherit_out().exec()
-    else:
-        print("pre-commit isn't installed")
+    pre_commit.args("install").inherit_out().exec()

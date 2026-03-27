@@ -42,6 +42,7 @@ dev = [
   "basedpyright>=1.38.3", # MIT
   "licenseheaders>=0.8.8", # MIT
   "poethepoet>=0.33.1", # MIT
+  "pre-commit>=4.5.1", # MIT
   "pytest-timeout>=2.3.1", # MIT
   "pytest-xdist>=3.6.1", # MIT
   "pytest>=8.3.5", # MIT
