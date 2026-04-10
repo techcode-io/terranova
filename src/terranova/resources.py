@@ -110,7 +110,8 @@ class ResourcesRunbook:
                         entry.with_if is None or entry.with_if != "is_defined"
                     ):
                         raise MissingRunbookEnvError(entry.name)
-                    env[entry.name] = maybe_env_var
+                    if maybe_env_var:
+                        env[entry.name] = maybe_env_var
         if self.workdir:
             workdir = workdir.joinpath(self.workdir)
         entrypoint = Command(self.entrypoint).env(env).cwd(workdir).inherit()
