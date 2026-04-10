@@ -26,7 +26,6 @@
 
 ## :package: Prerequisites
 
-- [Python 3.13+](https://www.python.org/downloads/)
 - [uv](https://docs.astral.sh/uv/) for build system.
 - [Podman](https://podman.io/docs) for container packaging.
 
