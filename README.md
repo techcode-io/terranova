@@ -4,7 +4,8 @@
   <i align="center">Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale.</i>
 </p>
 
-> **Note**: This is a fork of [elastic/terranova](https://github.com/elastic/terranova). See the [original repository](https://github.com/elastic/terranova) for the upstream source.
+> **Note**: This is a fork of [elastic/terranova](https://github.com/elastic/terranova) maintained and developed by [techcode.io](https://techcode.io).<br>
+> See the [original repository](https://github.com/elastic/terranova) for the upstream source.
 
 <h4 align="center">
   <a href="https://github.com/techcode-io/terranova/actions/workflows/ci.yml">
