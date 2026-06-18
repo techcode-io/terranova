@@ -53,6 +53,15 @@ jobs:
       - name: Build
         run: uv run poe build
 
+      - uses: actions/attest@v4
+        with:
+          subject-path: "dist/*"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: terranova-${{ matrix.os }}
+          path: "dist/*"
+
   test:
     needs:
       - build
@@ -70,3 +79,43 @@ jobs:
 
       - name: Test
         run: uv run poe test
+
+  sanitize:
+    needs:
+      - test
+    strategy:
+      matrix:
+        os:
+          - macos-15
+          - macos-15-intel
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+
+      - name: Verify macOS amd64 binary
+        run: |
+          ./dist/terranova-*-darwin-amd64 || exit 1
+        if: runner.arch == 'X64' && runner.os == 'macOS'
+
+      - name: Verify macOS arm64 binary
+        run: |
+          ./dist/terranova-*-darwin-arm64 || exit 1
+        if: runner.arch == 'ARM64' && runner.os == 'macOS'
+
+      - name: Verify linux amd64 binary
+        run: |
+          ./dist/terranova-*-linux-amd64 || exit 1
+        if: runner.arch == 'X64' && runner.os == 'Linux'
+
+      - name: Verify linux arm64 binary
+        run: |
+          ./dist/terranova-*-linux-arm64 || exit 1
+        if: runner.arch == 'ARM64' && runner.os == 'Linux'

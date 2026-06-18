@@ -19,36 +19,12 @@ concurrency:
   group: ${{ github.workflow }}
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os:
-          - macos-15
-          - macos-15-intel
-          - ubuntu-latest
-    runs-on: ${{ matrix.os }}
+  ci:
     permissions:
-      artifact-metadata: write
-      attestations: write
-      contents: write
+      contents: read
       id-token: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install environment
-        uses: ./.github/workflows/env-install
-
-      - name: Build
-        run: uv run poe build
-
-      - uses: actions/attest@v4
-        with:
-          subject-path: "dist/*"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: terranova-${{ matrix.os }}
-          path: "dist/*"
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   release:
     runs-on: ubuntu-latest
