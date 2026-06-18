@@ -35,6 +35,8 @@ jobs:
         run: uv run poe lint
 
   build:
+    permissions:
+      id-token: write
     needs:
       - lint
     strategy:
