@@ -108,23 +108,23 @@ jobs:
       - name: Verify macOS amd64 binary
         run: |
           chmod +x ./dist/terranova-*-darwin-amd64
-          ./dist/terranova-*-darwin-amd64 || exit 1
+          ./dist/terranova-*-darwin-amd64 --version || exit 1
         if: runner.arch == 'X64' && runner.os == 'macOS'
 
       - name: Verify macOS arm64 binary
         run: |
           chmod +x ./dist/terranova-*-darwin-arm64
-          ./dist/terranova-*-darwin-arm64 || exit 1
+          ./dist/terranova-*-darwin-arm64 --version || exit 1
         if: runner.arch == 'ARM64' && runner.os == 'macOS'
 
       - name: Verify linux amd64 binary
         run: |
           chmod +x ./dist/terranova-*-linux-amd64
-          ./dist/terranova-*-linux-amd64 || exit 1
+          ./dist/terranova-*-linux-amd64 --version || exit 1
         if: runner.arch == 'X64' && runner.os == 'Linux'
 
       - name: Verify linux arm64 binary
         run: |
           chmod +x ./dist/terranova-*-linux-arm64
-          ./dist/terranova-*-linux-arm64 || exit 1
+          ./dist/terranova-*-linux-arm64 --version || exit 1
         if: runner.arch == 'ARM64' && runner.os == 'Linux'
