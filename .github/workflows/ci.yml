@@ -103,6 +103,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
+          path: dist
 
       - name: Verify macOS amd64 binary
         run: |
