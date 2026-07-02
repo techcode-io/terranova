@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import override
 
 from terranova.exceptions import InvalidResourcesError
-from terranova.process import Bind, EnvCmd, CommandNotFound, Command, ErrorReturnCode
+from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
 from terranova.utils import Log, SharedContext
 
 
@@ -75,7 +75,7 @@ class Terraform(Bind):
         env = EnvCmd.inherit(lambda k, _: is_allowed_env_var(k))
 
         # Bind variables
-        additional_env_vars = {}
+        additional_env_vars: dict[str, str] = {}
         if self.__variables:
             for key, value in self.__variables.items():
                 additional_env_vars[f"TF_VAR_{key}"] = value

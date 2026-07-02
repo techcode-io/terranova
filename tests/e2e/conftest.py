@@ -23,7 +23,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def assert_result(result: Result) -> tuple[str, str]:
+def assert_result(result: Result) -> tuple[str, str | None]:
     stdout = result.stdout
     stderr = result.stderr if result.stderr_bytes else None
 

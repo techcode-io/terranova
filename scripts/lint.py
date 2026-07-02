@@ -19,7 +19,7 @@ from io import StringIO
 
 from terranova.process import ErrorReturnCode
 
-from scripts.utils import detect_git, detect_ruff, detect_uv, fatal
+from scripts.utils import detect_basedpyright, detect_git, detect_ruff, detect_uv, fatal
 
 
 def git_branch_delete(branch_name: str) -> None:
@@ -36,6 +36,16 @@ def check_ruff() -> None:
     try:
         ruff = detect_ruff()
         ruff.args("check", "src/terranova").inherit_out().exec()
+    except ErrorReturnCode as err:
+        # Forward exit code without traceback
+        sys.exit(err.exit_code)
+
+
+def check_basedpyright() -> None:
+    print("Type checking codebase")
+    try:
+        basedpyright = detect_basedpyright()
+        basedpyright.inherit_out().exec()
     except ErrorReturnCode as err:
         # Forward exit code without traceback
         sys.exit(err.exit_code)
@@ -76,4 +86,5 @@ def check_license_headers() -> None:
 
 def run() -> None:
     check_ruff()
+    check_basedpyright()
     check_license_headers()

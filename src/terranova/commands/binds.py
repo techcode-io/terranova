@@ -18,8 +18,10 @@ import json
 import os
 import shutil
 from base64 import b64decode, b64encode
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import cast
 
 import click
 import mdformat
@@ -28,7 +30,6 @@ from jinja2 import Environment, PackageLoader
 from rich.table import Table
 
 from terranova.commands.helpers import (
-    Selector,
     SelectorType,
     discover_resources,
     extract_import_vars,
@@ -44,7 +45,14 @@ from terranova.exceptions import (
     MissingRunbookError,
 )
 from terranova.process import ErrorReturnCode
+from terranova.resources import Selector
 from terranova.utils import Constants, Log, SharedContext
+
+
+def format_markdown(text: str) -> str:
+    """Format markdown text, shielding callers from mdformat's untyped signature."""
+    text_fn = cast("Callable[[str], str]", mdformat.text)
+    return text_fn(text)
 
 
 @click.command("init")
@@ -260,7 +268,7 @@ def validate(path: str | None, fail_at_end: bool) -> None:
 def docs(docs_dir: Path) -> None:
     """Generate documentation for all resources."""
     # Find all resources manifests
-    jobs = []
+    jobs: list[tuple[Path, Path]] = []
     for path, _, files in os.walk(SharedContext.resources_dir().as_posix()):
         for file in files:
             if os.path.basename(file) == Constants.MANIFEST_FILE_NAME:
@@ -291,7 +299,7 @@ def docs(docs_dir: Path) -> None:
 
         # Write documentation file
         rendering = tmpl.render({"manifest": manifest, "resources": resources})
-        formatted = mdformat.text(rendering)
+        formatted = format_markdown(rendering)
         target_path.with_suffix(".md").write_text(
             data=formatted, encoding=Constants.ENCODING_UTF_8
         )
@@ -358,10 +366,10 @@ def plan(
 
     # Store errors if fail_at_end
     errors = False
-    error_exit_codes = []
+    error_exit_codes: list[int] = []
 
     # Execution plan
-    execution_plan = {}
+    execution_plan: dict[str, str] = {}
 
     # Generate all plans
     for full_path, rel_path in paths:
@@ -372,43 +380,49 @@ def plan(
 
         # Execute plan command
         try:
-            args = {
-                "compact_warnings": compact_warnings,
-                "input": input,
-                "no_color": no_color,
-                "parallelism": parallelism,
-                "detailed_exitcode": detailed_exitcode,
-            }
-
             if out:
                 with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
-                    path = Path(file_descriptor.name)
-                    args["out"] = path
+                    resolved_path = Path(file_descriptor.name)
                     try:
-                        terraform.plan(**args)
-                        execution_plan[rel_path] = b64encode(path.read_bytes()).decode(
-                            Constants.ENCODING_UTF_8
+                        terraform.plan(
+                            compact_warnings=compact_warnings,
+                            input=input,
+                            no_color=no_color,
+                            parallelism=parallelism,
+                            detailed_exitcode=detailed_exitcode,
+                            out=resolved_path,
                         )
+                        execution_plan[rel_path] = b64encode(
+                            resolved_path.read_bytes()
+                        ).decode(Constants.ENCODING_UTF_8)
                     except ErrorReturnCode as plan_err:
                         if plan_err.exit_code == 2:
                             execution_plan[rel_path] = b64encode(
-                                path.read_bytes()
+                                resolved_path.read_bytes()
                             ).decode(Constants.ENCODING_UTF_8)
                         raise plan_err
             else:
-                terraform.plan(**args)
+                terraform.plan(
+                    compact_warnings=compact_warnings,
+                    input=input,
+                    no_color=no_color,
+                    parallelism=parallelism,
+                    detailed_exitcode=detailed_exitcode,
+                )
         except ErrorReturnCode as err:
             errors = True
             error_exit_codes.append(err.exit_code)
             if not fail_at_end:
                 break
 
-    def write_plan():
+    def save_plan_to_file():
+        if not out:
+            return
         out.write_text(json.dumps(execution_plan))
         Log.action(
             f"Saved terranova plan to: {out}\n\n"
-            f"To perform exactly these actions with terranova, run the following command to apply:\n"
-            f'    terranova apply "{out}"'
+            + "To perform exactly these actions with terranova, run the following command to apply:\n"
+            + f'    terranova apply "{out}"'
         )
 
     # Report any errors if fail_at_end has been enabled
@@ -419,13 +433,12 @@ def plan(
         # If all exit codes are 2, the plan succeeded for all paths, but there are changes, hence we should return 2.
         exit_code = 1 if 1 in error_exit_codes else 2
         # Exit code 2 is a success, but there are changes. Hence, we should write the plan to the given path.
-        if exit_code == 2 and out:
-            write_plan()
+        if exit_code == 2:
+            save_plan_to_file()
         raise Exit(code=exit_code)
 
     # Generate terranova plan
-    if out:
-        write_plan()
+    save_plan_to_file()
 
 
 @click.command("apply")
@@ -447,9 +460,12 @@ def apply(
 ) -> None:
     """Create or update resources."""
     # Check if there is a plan to apply
-    if path_or_plan.endswith("tnplan"):
-        execution_plan = json.loads(
-            Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)
+    execution_plan: dict[str, str] | None
+    paths: list[tuple[Path, str]]
+    if path_or_plan and path_or_plan.endswith("tnplan"):
+        execution_plan = cast(
+            "dict[str, str]",
+            json.loads(Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)),
         )
         paths = []
         for rel_path in execution_plan.keys():

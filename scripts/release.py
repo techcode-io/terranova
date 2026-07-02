@@ -92,12 +92,22 @@ def pre() -> None:
 
     # Push release branch
     git.args("add", "--all").inherit_out().exec()
-    git.args("commit", "-m", f"release: terranova v{release_version}", "--no-verify").inherit_out().exec()
+    (
+        git.args(
+            "commit", "-m", f"release: terranova v{release_version}", "--no-verify"
+        )
+        .inherit_out()
+        .exec()
+    )
     git.args("push", "origin", branch_name).inherit_out().exec()
 
     # Create a PR
     gh = detect_gh()
-    gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}").inherit_out().exec()
+    (
+        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
+        .inherit_out()
+        .exec()
+    )
 
 
 def run() -> None:
@@ -151,9 +161,17 @@ def post() -> None:
 
     # Push changes
     git.args("add", "--all").inherit_out().exec()
-    git.args("commit", "-m", "chore: prepare for next iteration", "--no-verify").inherit_out().exec()
+    (
+        git.args("commit", "-m", "chore: prepare for next iteration", "--no-verify")
+        .inherit_out()
+        .exec()
+    )
     git.args("push", "origin", branch_name).inherit_out().exec()
 
     # Create a PR
     gh = detect_gh()
-    gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}").inherit_out().exec()
+    (
+        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
+        .inherit_out()
+        .exec()
+    )

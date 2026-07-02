@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import queue
 import shutil
 import subprocess
 import sys
@@ -26,9 +27,8 @@ from asyncio import Task, create_task, gather, wait_for
 from contextlib import suppress
 from io import TextIOBase
 from pathlib import Path
-from queue import Queue
 from threading import Thread
-from typing import IO, Any, Callable, Self, TextIO, overload
+from typing import IO, Callable, Self, TextIO, overload, Protocol
 
 from terranova.io import close
 
@@ -38,12 +38,20 @@ type AsyncProcess = asyncio.subprocess.Process
 type Process = SyncProcess | AsyncProcess
 
 
+class ProcessObserver(Protocol):
+    """Observer notified at process spawn and exit."""
+
+    def on_spawn(self, process: Process) -> None: ...
+
+    def on_exit(self, process: Process) -> None: ...
+
+
 class CommandNotFound(Exception):
     """Raised when a command binary is not found."""
 
     def __init__(self, command: str) -> None:
         super().__init__(f"Command not found: {command}")
-        self.command = command
+        self.command: str = command
 
 
 class ErrorReturnCode(Exception):
@@ -81,8 +89,19 @@ class TimeoutException(Exception):
 
 
 # Redirect command types
-type RedirectIn = Queue | str | TextIO
+type SyncRedirectIn = queue.Queue[bytes | str | None] | str | TextIO
+type AsyncRedirectIn = asyncio.Queue[bytes | str | None] | str | TextIO
+type RedirectIn = SyncRedirectIn | AsyncRedirectIn
 type RedirectOut = Path | TextIO | Callable[[str], None]
+
+
+def strip_redirect(log_fn: Callable[[str], None]) -> Callable[[str], None]:
+    """Wrap a log callable to strip trailing newlines from process output lines.
+
+    Use this when redirecting process stdout/stderr to a structlog logger so
+    each line is emitted as a clean event without a trailing newline character.
+    """
+    return lambda line: log_fn(line.rstrip("\n"))
 
 
 class EnvCmd:
@@ -90,7 +109,7 @@ class EnvCmd:
 
     def __init__(self) -> None:
         """Init env command."""
-        self.__build = {}
+        self.__build: dict[str, str] = {}
 
     @staticmethod
     def empty() -> "EnvCmd":
@@ -127,7 +146,7 @@ class PathCmd:
 
     def __init__(self) -> None:
         """Init path command."""
-        self.__build = []
+        self.__build: list[str] = []
 
     @staticmethod
     def empty() -> "PathCmd":
@@ -194,6 +213,7 @@ class Command:
         self.__out: RedirectOut | None = None
         self.__err: RedirectOut | None = None
         self.__timeout: int | None = None
+        self.__observers: list[ProcessObserver] = []
 
     @overload
     def args(self) -> tuple[str, ...]: ...
@@ -336,15 +356,20 @@ class Command:
         self.inherit_out()
         return self
 
-    def inherit_out(self) -> Self:
+    def inherit_out(self, if_unset: bool = False) -> Self:
         """
         Inherit stdout and stderr from current process.
+
+        Args:
+            if_unset: when True, only inherit a stream if it is not already configured.
 
         Returns:
             self for chaining.
         """
-        self.__out = sys.stdout
-        self.__err = sys.stderr
+        if not if_unset or self.__out is None:
+            self.__out = sys.stdout
+        if not if_unset or self.__err is None:
+            self.__err = sys.stderr
         return self
 
     def timeout(self, timeout: int) -> Self:
@@ -359,6 +384,11 @@ class Command:
         """
         return Path(self.__cmd_path)
 
+    def add_observer(self, observer: ProcessObserver) -> Self:
+        """Register an observer to be notified on process spawn and exit."""
+        self.__observers.append(observer)
+        return self
+
     def copy(self, cmd: "Command") -> Self:
         """Copy all parameters from another command."""
         self.__env = cmd.__env.copy()
@@ -368,6 +398,7 @@ class Command:
         self.__out = cmd.__out
         self.__err = cmd.__err
         self.__timeout = cmd.__timeout
+        self.__observers = list(cmd.__observers)
         return self
 
     def __prepare_stdin(self) -> int | None:
@@ -379,7 +410,7 @@ class Command:
         """
         if self.__in is None:
             return subprocess.DEVNULL
-        if isinstance(self.__in, (Queue, str)):
+        if isinstance(self.__in, (queue.Queue, asyncio.Queue, str)):
             return subprocess.PIPE
         try:
             return self.__in.fileno()
@@ -389,7 +420,7 @@ class Command:
     @staticmethod
     def __prepare_redirect(
         redirect: RedirectOut | None,
-    ) -> int | IO[Any]:
+    ) -> int | IO[bytes]:
         """Prepare a stdout/stderr redirect for subprocess.
 
         Args:
@@ -442,17 +473,17 @@ class Command:
         Returns:
             thread for async stdin feeding from Queue, or None for string input.
         """
-        if isinstance(self.__in, Queue):
+        if isinstance(self.__in, queue.Queue):
+            sync_queue = self.__in
 
             def forward() -> None:
                 assert process.stdin is not None
                 while True:
-                    data = self.__in.get()
+                    data = sync_queue.get()
                     if data is None:
                         break
-                    process.stdin.write(
-                        data.encode() if isinstance(data, str) else data
-                    )
+                    encoded: bytes = data if isinstance(data, bytes) else data.encode()
+                    process.stdin.write(encoded)
                     process.stdin.flush()
                 process.stdin.close()
 
@@ -509,7 +540,8 @@ class Command:
     def __create_gc_thread(
         process: SyncProcess,
         io_threads: list[Thread],
-        opened_files: list[IO[Any]],
+        opened_files: list[IO[bytes]],
+        observers: "list[ProcessObserver]",
     ) -> None:
         """Start a background thread to clean up resources after process exits.
 
@@ -517,6 +549,7 @@ class Command:
             process: the subprocess to monitor.
             io_threads: list of I/O forwarding threads to join.
             opened_files: list of file handles to close.
+            observers: observers to notify once the process has exited.
         """
 
         def garbage_collector() -> None:
@@ -529,6 +562,8 @@ class Command:
                     with suppress(RuntimeError):
                         th.join(timeout=5)
                 close(opened_files)
+                for obs in observers:
+                    obs.on_exit(process)
 
         thread = threading.Thread(target=garbage_collector, daemon=True)
         thread.start()
@@ -549,7 +584,7 @@ class Command:
         stderr = self.__prepare_redirect(self.__err)
 
         # Track open files
-        opened_files: list[IO[Any]] = []
+        opened_files: list[IO[bytes]] = []
         if not isinstance(stdout, int):
             opened_files.append(stdout)
         if not isinstance(stderr, int):
@@ -571,6 +606,9 @@ class Command:
 
         # Start background threads to forward piped stdout/stderr to their targets
         io_threads = self.__create_io_threads(process)
+
+        for obs in self.__observers:
+            obs.on_spawn(process)
 
         if wait_completion:
             try:
@@ -595,14 +633,16 @@ class Command:
                         process.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         process.kill()
+                for obs in self.__observers:
+                    obs.on_exit(process)
         else:
-            self.__create_gc_thread(process, io_threads, opened_files)
+            self.__create_gc_thread(process, io_threads, opened_files, self.__observers)
             return process
 
     async def __prepare_async_redirect(
         self,
         redirect: RedirectOut | None,
-    ) -> int | IO[Any]:
+    ) -> int | IO[bytes]:
         """Prepare stdout/stderr redirect for async subprocess.
 
         Args:
@@ -627,7 +667,7 @@ class Command:
     def __create_task_forwarder(
         stream: asyncio.StreamReader,
         target: RedirectOut,
-    ) -> Task:
+    ) -> Task[None]:
         """Forward an async stream to configured target.
 
         Args:
@@ -651,23 +691,23 @@ class Command:
 
         return create_task(forward())
 
-    async def __async_handle_stdin(self, process: "AsyncProcess") -> Task | None:
+    async def __async_handle_stdin(self, process: "AsyncProcess") -> Task[None] | None:
         """Handle async stdin input from Queue or string.
 
         Args:
             process: the asyncio subprocess to feed stdin to.
         """
-        if isinstance(self.__in, Queue) and process.stdin is not None:
+        if isinstance(self.__in, asyncio.Queue) and process.stdin is not None:
+            async_queue = self.__in
 
             async def forward() -> None:
                 assert process.stdin is not None
                 while True:
-                    data = await asyncio.to_thread(self.__in.get)
+                    data = await async_queue.get()
                     if data is None:
                         break
-                    process.stdin.write(
-                        data.encode() if isinstance(data, str) else data
-                    )
+                    encoded: bytes = data if isinstance(data, bytes) else data.encode()
+                    process.stdin.write(encoded)
                     await process.stdin.drain()
                 process.stdin.close()
                 await process.stdin.wait_closed()
@@ -683,7 +723,7 @@ class Command:
     def __async_handle_stdout_stderr(
         self,
         process: "AsyncProcess",
-    ) -> list[Task]:
+    ) -> list[Task[None]]:
         """Create forwarding tasks for stdout and stderr.
 
         Args:
@@ -691,7 +731,7 @@ class Command:
         Returns:
             list of tasks started for output forwarding.
         """
-        tasks: list[Task] = []
+        tasks: list[Task[None]] = []
 
         for proc_stream, redirect in (
             (process.stdout, self.__out),
@@ -708,7 +748,7 @@ class Command:
     async def __create_io_tasks(
         self,
         process: "AsyncProcess",
-    ) -> list[asyncio.Task]:
+    ) -> list[asyncio.Task[None]]:
         """Start tasks for forwarding I/O to callbacks/StringIO.
 
         Args:
@@ -716,7 +756,7 @@ class Command:
         Returns:
             list of tasks started for I/O forwarding.
         """
-        tasks: list[asyncio.Task] = []
+        tasks: list[asyncio.Task[None]] = []
 
         # Handle stdin from Queue or string
         stdin_task = await self.__async_handle_stdin(process)
@@ -730,8 +770,9 @@ class Command:
     @staticmethod
     def __create_gc_task(
         process: "AsyncProcess",
-        io_tasks: list[asyncio.Task],
-        opened_files: list[IO[Any]],
+        io_tasks: list[asyncio.Task[None]],
+        opened_files: list[IO[bytes]],
+        observers: "list[ProcessObserver]",
     ) -> None:
         """Clean up resources after async process completes.
 
@@ -739,6 +780,7 @@ class Command:
             process: the asyncio subprocess to wait for.
             io_tasks: list of I/O forwarding tasks to await.
             opened_files: list of file handles to close.
+            observers: observers to notify once the process has exited.
         """
 
         async def garbage_collector() -> None:
@@ -752,6 +794,8 @@ class Command:
                     return_exceptions=True,
                 )
                 close(opened_files)
+                for obs in observers:
+                    obs.on_exit(process)
 
         create_task(garbage_collector())
 
@@ -774,7 +818,7 @@ class Command:
         )
 
         # Track open files
-        opened_files: list[IO[Any]] = []
+        opened_files: list[IO[bytes]] = []
         if not isinstance(stdout, int):
             opened_files.append(stdout)
         if not isinstance(stderr, int):
@@ -796,6 +840,9 @@ class Command:
 
         # Handle I/O concurrently with waiting
         io_tasks = await self.__create_io_tasks(process)
+
+        for obs in self.__observers:
+            obs.on_spawn(process)
 
         if wait_completion:
             try:
@@ -824,8 +871,10 @@ class Command:
                 raise
             finally:
                 close(opened_files)
+                for obs in self.__observers:
+                    obs.on_exit(process)
         else:
-            self.__create_gc_task(process, io_tasks, opened_files)
+            self.__create_gc_task(process, io_tasks, opened_files, self.__observers)
             return process
 
 
@@ -839,7 +888,7 @@ class Bind:
         Args:
             cmd_path: command path.
         """
-        self._cmd = self.create(cmd_path)
+        self._cmd: Command = self.create(cmd_path)
 
     def create(self, cmd_path: str | Path) -> Command:
         """
@@ -851,6 +900,11 @@ class Bind:
             command wrapper.
         """
         return Command(cmd_path)
+
+    def add_observer(self, observer: ProcessObserver) -> Self:
+        """Register an observer to be notified on process spawn and exit."""
+        self._cmd.add_observer(observer)
+        return self
 
     @overload
     def env(self) -> dict[str, str]: ...
@@ -938,14 +992,17 @@ class Bind:
         self._cmd.inherit()
         return self
 
-    def inherit_out(self) -> Self:
+    def inherit_out(self, if_unset: bool = False) -> Self:
         """
         Inherit stdout and stderr from current process.
+
+        Args:
+            if_unset: when True, only inherit a stream if it is not already configured.
 
         Returns:
             self for chaining.
         """
-        self._cmd.inherit_out()
+        self._cmd.inherit_out(if_unset=if_unset)
         return self
 
     def timeout(self, timeout: int) -> Self:

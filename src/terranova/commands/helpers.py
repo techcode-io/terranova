@@ -29,14 +29,14 @@ from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Se
 from terranova.utils import Constants, Log, SharedContext
 
 
-class SelectorType(click.ParamType):
+class SelectorType(click.ParamType[Selector]):
     """Selector param typing for click."""
 
-    name = "selector"
+    name: str = "selector"
 
     @override
     def convert(
-        self, value, param: Parameter | None, ctx: click.Context | None
+        self, value: object, param: Parameter | None, ctx: click.Context | None
     ) -> Selector:
         if not isinstance(value, str):
             self.fail(f"{value!r} isn't a valid selector", param, ctx)

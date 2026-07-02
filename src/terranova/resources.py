@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from re import Pattern
+from typing import cast
 
 import yaml
 from jsonschema.exceptions import ValidationError
@@ -162,25 +163,25 @@ class ResourcesManifest:
             Constants.FILE_MODE_READ, encoding=Constants.ENCODING_UTF_8
         ) as file_descriptor:
             try:
-                data = yaml.safe_load(file_descriptor)
+                data = cast("dict[str, object]", yaml.safe_load(file_descriptor))
             except yaml.YAMLError as err:
                 raise InvalidManifestError(path) from err
 
             # Check version
-            version = data.get("version", "1.0")
+            version = str(data.get("version", "1.0"))
 
             # Get configuration schema
             try:
-                schema = pkgutil.get_data(
+                raw_schema = pkgutil.get_data(
                     __name__, f"schemas/manifest_schema_v{version}.json"
                 )
-                if not schema:
+                if not raw_schema:
                     raise FileNotFoundError(
                         f"The schema `schemas/manifest_schema_v{version}.json` can't be found"
                     )
             except FileNotFoundError as err:
                 raise VersionManifestError(version) from err
-            schema = json.loads(schema)
+            schema = cast("dict[str, object]", json.loads(raw_schema))
 
             # Validate manifest
             try:
@@ -231,10 +232,10 @@ class ResourcesFinder:
     """Represents a resources finder able to find resources in files and directories."""
 
     # Resource patterns
-    __RESOURCE_PATTERN: Pattern = re.compile(
+    __RESOURCE_PATTERN: Pattern[str] = re.compile(
         r"""(/\*(?P<comments>[@\S\s\n]*?)\*/\n)?(?P<resource_block_type>resource|data) \"(?P<resource_type>\w+)\" \"(?P<resource_name>[a-zA-Z0-9_-]+)\""""
     )
-    __RESOURCE_ATTR_PATTERN: Pattern = re.compile(
+    __RESOURCE_ATTR_PATTERN: Pattern[str] = re.compile(
         r"""@(?P<attr_name>\S+)\s+(?P<attr_value>.+)"""
     )
 
@@ -252,7 +253,7 @@ class ResourcesFinder:
         Raises:
             InvalidResourcesError: if a resource doesn't have metadata.
         """
-        resources = []
+        resources: list[Resource] = []
         for file in sorted(path.glob("*.tf")):
             resources += ResourcesFinder.find_in_file(file, selectors)
         return resources
@@ -272,23 +273,17 @@ class ResourcesFinder:
         Raises:
             InvalidResourcesError: if a resource doesn't have metadata.
         """
-        resources = []
+        resources: list[Resource] = []
 
         # Read file content
         content = path.read_text(Constants.ENCODING_UTF_8)
 
         # Detect all resources with metadata
-        detected_resources = ResourcesFinder.__RESOURCE_PATTERN.findall(content)
+        detected_resources: list[tuple[str, str, str, str, str]] = (
+            ResourcesFinder.__RESOURCE_PATTERN.findall(content)
+        )
         for resource_match in detected_resources:
             # Extract match groups
-            if len(resource_match) < 4:
-                _, resource_block_type, resource_type, resource_name = resource_match
-                if resource_block_type == ResourceBlockType.RESOURCE:
-                    raise InvalidResourcesError(
-                        cause=f"The resource `{resource_block_type}:{resource_type}:{resource_name}` at `{path.as_posix()}` isn't describe.",
-                        resolution="Add metadata for the above resource.",
-                    )
-
             (
                 _,
                 maybe_resource_attrs,
@@ -307,14 +302,14 @@ class ResourcesFinder:
                 )
 
             # Parse attributes
-            attrs = defaultdict(list)
+            attrs: defaultdict[str, list[str]] = defaultdict(list)
             for maybe_attr in maybe_resource_attrs.splitlines():
                 attr_match = ResourcesFinder.__RESOURCE_ATTR_PATTERN.match(maybe_attr)
                 if attr_match:
                     name, value = attr_match.groups()
                     attrs[name].append(value)
             resource = Resource(
-                block_type=resource_block_type,
+                block_type=ResourceBlockType(resource_block_type),
                 name=resource_name,
                 type=resource_type,
                 attrs=attrs,

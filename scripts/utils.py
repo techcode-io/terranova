@@ -92,6 +92,18 @@ def detect_ruff() -> Command:
         fatal("`ruff` isn't installed")
 
 
+def detect_basedpyright() -> Command:
+    """
+    Try to detect basedpyright.
+    Returns:
+        a command if basedpyright is detected.
+    """
+    try:
+        return Command("basedpyright")
+    except CommandNotFound:
+        fatal("`basedpyright` isn't installed")
+
+
 def detect_pyinstaller() -> Command:
     """
     Try to detect pyinstaller.
@@ -123,7 +135,12 @@ def project_version() -> str:
     """
     uv = detect_uv()
     capture_stdout = StringIO()
-    uv.args("pip", "show", "terranova").stdout(capture_stdout).stderr(sys.stderr).exec()
+    (
+        uv.args("pip", "show", "terranova")
+        .stdout(capture_stdout)
+        .stderr(sys.stderr)
+        .exec()
+    )
     match = re.search(r"Version: (.*)", capture_stdout.getvalue())
     if not match:
         fatal("Failed to detect project version")

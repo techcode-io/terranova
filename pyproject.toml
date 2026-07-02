@@ -52,6 +52,11 @@ dev = [
 [tool.uv]
 default-groups = ["dev", "build"]
 
+[tool.basedpyright]
+# Command/Bind expose a fluent builder API (methods return `Self` for chaining); flagging every
+# non-chained call as an unused result is noise, not a real bug signal.
+reportUnusedCallResult = false
+
 [tool.poe.tasks."env:configure"]
 help = "Setup project environment."
 script = "scripts.env:configure"

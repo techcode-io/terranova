@@ -25,6 +25,7 @@ class ExplainedError(Exception):
 
     def __init__(self, cause: str, resolution: str | None = None) -> None:
         """Init explained error."""
+        super().__init__(cause)
         self.__cause = cause
         self.__resolution = resolution
 

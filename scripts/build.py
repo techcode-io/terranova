@@ -59,35 +59,47 @@ def run() -> None:
         cmd = container_backend()
         for arch in ["amd64", "arm64"]:
             platform_arch = f"linux/{arch}"
-            cmd.args(
-                "buildx",
-                "build",
-                "--load",
-                "--platform",
-                platform_arch,
-                "--build-arg",
-                f"base_image_version={python_version}",
-                "-t",
-                f"{Constants.REGISTRY_URL}/terranova:{image_id}",
-                "-f",
-                "Containerfile",
-                ".",
-            ).inherit_out().exec()
+            (
+                cmd.args(
+                    "buildx",
+                    "build",
+                    "--load",
+                    "--platform",
+                    platform_arch,
+                    "--build-arg",
+                    f"base_image_version={python_version}",
+                    "-t",
+                    f"{Constants.REGISTRY_URL}/terranova:{image_id}",
+                    "-f",
+                    "Containerfile",
+                    ".",
+                )
+                .inherit_out()
+                .exec()
+            )
             capture_stdout = StringIO()
-            cmd.args(
-                "run",
-                "-d",
-                "--platform",
-                platform_arch,
-                "--entrypoint=cat",
-                f"{Constants.REGISTRY_URL}/terranova:{image_id}",
-            ).stdout(capture_stdout).exec()
+            (
+                cmd.args(
+                    "run",
+                    "-d",
+                    "--platform",
+                    platform_arch,
+                    "--entrypoint=cat",
+                    f"{Constants.REGISTRY_URL}/terranova:{image_id}",
+                )
+                .stdout(capture_stdout)
+                .exec()
+            )
             container_id = capture_stdout.getvalue().strip()
-            cmd.args(
-                "cp",
-                f"{container_id}:/opt/terranova/dist/terranova",
-                (local_dist_path / f"terranova-{version}-linux-{arch}").as_posix(),
-            ).inherit_out().exec()
+            (
+                cmd.args(
+                    "cp",
+                    f"{container_id}:/opt/terranova/dist/terranova",
+                    (local_dist_path / f"terranova-{version}-linux-{arch}").as_posix(),
+                )
+                .inherit_out()
+                .exec()
+            )
             cmd.args(
                 "rm",
                 "-f",

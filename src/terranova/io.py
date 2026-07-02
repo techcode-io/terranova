@@ -14,11 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from collections.abc import Sequence
 from contextlib import suppress
-from typing import IO, Any
+from typing import Protocol
 
 
-def close(files: list[IO[Any]]) -> None:
+class Closeable(Protocol):
+    """Protocol for objects that support closing."""
+
+    def close(self) -> None: ...
+
+
+def close(files: Sequence[Closeable]) -> None:
     """
     Close a list of file handles, ignoring any errors.
 

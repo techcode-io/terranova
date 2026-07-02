@@ -14,20 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from functools import partial
 from pathlib import Path
 from threading import Lock
-from typing import Any, Final, NoReturn
+from typing import Final, NoReturn, TypeVar, cast, dataclass_transform
 
 from click.exceptions import Exit
 from rich.console import Console
-from serde import disabled
+from serde import disabled, field
 from serde import serde as inner_serde
 
 from .exceptions import ExplainedError
 
-# Shorthand for serde with type check disabled
-serde = partial(inner_serde, type_check=disabled)
+_T = TypeVar("_T")
+
+
+@dataclass_transform(field_specifiers=(field,))
+def serde(cls: type[_T]) -> type[_T]:
+    """Shorthand for serde with type check disabled."""
+    return inner_serde(cls, type_check=disabled)
 
 
 class Constants:
@@ -47,7 +51,7 @@ class SharedContext:
     """Utility class to share context globally."""
 
     # Shard context
-    __UNDERLYING: dict[str, Any] = {}
+    __UNDERLYING: dict[str, object] = {}
     __LOCK: Lock = Lock()
 
     @staticmethod
@@ -64,31 +68,31 @@ class SharedContext:
     def console() -> Console:
         """Retrieve console from context."""
         with SharedContext.__LOCK:
-            return SharedContext.__UNDERLYING[Constants.CTX_CONSOLE]
+            return cast(Console, SharedContext.__UNDERLYING[Constants.CTX_CONSOLE])
 
     @staticmethod
     def err_console() -> Console:
         """Retrieve err console from context."""
         with SharedContext.__LOCK:
-            return SharedContext.__UNDERLYING[Constants.CTX_ERR_CONSOLE]
+            return cast(Console, SharedContext.__UNDERLYING[Constants.CTX_ERR_CONSOLE])
 
     @staticmethod
     def is_debug_enabled() -> bool:
         """Returns true if debug is enabled."""
         with SharedContext.__LOCK:
-            return SharedContext.__UNDERLYING[Constants.CTX_DEBUG]
+            return cast(bool, SharedContext.__UNDERLYING[Constants.CTX_DEBUG])
 
     @staticmethod
     def is_verbose_enabled() -> bool:
         """Returns true if verbose is enabled."""
         with SharedContext.__LOCK:
-            return SharedContext.__UNDERLYING[Constants.CTX_VERBOSE]
+            return cast(bool, SharedContext.__UNDERLYING[Constants.CTX_VERBOSE])
 
     @staticmethod
     def conf_dir() -> Path:
         """Returns conf directory path."""
         with SharedContext.__LOCK:
-            return SharedContext.__UNDERLYING[Constants.CTX_CONF_DIR]
+            return cast(Path, SharedContext.__UNDERLYING[Constants.CTX_CONF_DIR])
 
     @staticmethod
     def resources_dir() -> Path:
@@ -120,14 +124,14 @@ class Log:
     """Utility class to log message or error using common pattern."""
 
     @classmethod
-    def action(cls, msg) -> None:
+    def action(cls, msg: object) -> None:
         """Log an action."""
-        SharedContext.console().print(f"[yellow]⇒[/yellow] {str(msg)}")
+        SharedContext.console().print(f"[yellow]⇒[/yellow] {msg}")
 
     @classmethod
-    def success(cls, msg) -> None:
+    def success(cls, msg: object) -> None:
         """Log a success."""
-        SharedContext.console().print(f"[green]✓[/green] Succeeded to {str(msg)}")
+        SharedContext.console().print(f"[green]✓[/green] Succeeded to {msg}")
 
     @classmethod
     def failure(cls, msgs: str | list[str], err: Exception | None = None) -> None:

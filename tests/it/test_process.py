@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from asyncio import Queue as AsyncQueue
 from io import StringIO
 from pathlib import Path
 from queue import Queue
+from typing import Callable
 
 import pytest
 
@@ -146,7 +148,7 @@ class TestCommand:
 
     def test_stdout_setter_callable(self) -> None:
         cmd = Command("echo")
-        callback = lambda _: None  # noqa: E731
+        callback: Callable[[str], None] = lambda _: None  # noqa: E731
         cmd.stdout(callback)
         assert cmd.stdout() is callback
 
@@ -281,7 +283,7 @@ class TestCommand:
 
     def test_exec_stdin_from_queue(self) -> None:
         lines: list[str] = []
-        q: Queue = Queue()
+        q: Queue[bytes | str | None] = Queue()
         q.put("line1\n")
         q.put("line2\n")
         q.put(None)
@@ -405,10 +407,10 @@ class TestCommand:
     def test_aexec_stdin_from_queue(self) -> None:
         async def run() -> list[str]:
             lines: list[str] = []
-            q: Queue = Queue()
-            q.put("async_line1\n")
-            q.put("async_line2\n")
-            q.put(None)
+            q: AsyncQueue[bytes | str | None] = AsyncQueue()
+            q.put_nowait("async_line1\n")
+            q.put_nowait("async_line2\n")
+            q.put_nowait(None)
             cmd = Command("cat")
             cmd.stdin(q)
             cmd.stdout(lines.append)
