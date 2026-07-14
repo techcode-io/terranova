@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from scripts.utils import detect_pyinstaller
+from scripts.binds.pyinstaller import PyInstaller
 
 
 def run() -> None:
@@ -36,5 +36,4 @@ def run() -> None:
             "./bin/terranova",
         ]
     )
-    pyinstaller = detect_pyinstaller()
-    pyinstaller.args(*args).inherit_out().exec()
+    PyInstaller().run(*args)

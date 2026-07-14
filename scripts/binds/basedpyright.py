@@ -14,9 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from scripts.utils import detect_pre_commit
+from scripts.utils import fatal
+from terranova.process import Bind, CommandNotFound
 
 
-def configure() -> None:
-    pre_commit = detect_pre_commit()
-    pre_commit.args("install").inherit_out().exec()
+class BasedPyright(Bind):
+    """Represents a bind to basedpyright command."""
+
+    def __init__(self) -> None:
+        """Init basedpyright bind."""
+        try:
+            super().__init__("basedpyright")
+        except CommandNotFound as err:
+            fatal("detect basedpyright binary", err)
+
+    def check(self) -> None:
+        """
+        Type check the project.
+
+        Raises:
+            ErrorReturnCode: if type errors are found.
+        """
+        self._cmd.inherit_out().exec()

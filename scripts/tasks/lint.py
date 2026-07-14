@@ -15,27 +15,19 @@
 # limitations under the License.
 #
 import sys
-from io import StringIO
 
+from scripts.binds.basedpyright import BasedPyright
+from scripts.binds.git import Git
+from scripts.binds.ruff import Ruff
+from scripts.binds.uv import Uv
+from scripts.utils import fatal
 from terranova.process import ErrorReturnCode
-
-from scripts.utils import detect_basedpyright, detect_git, detect_ruff, detect_uv, fatal
-
-
-def git_branch_delete(branch_name: str) -> None:
-    """Delete a git branch if exists."""
-    try:
-        git = detect_git()
-        git.args("branch", "-D", branch_name).inherit_out().exec()
-    except ErrorReturnCode:
-        pass
 
 
 def check_ruff() -> None:
     print("Checking codebase")
     try:
-        ruff = detect_ruff()
-        ruff.args("check", "src/terranova").inherit_out().exec()
+        Ruff().check("src/terranova")
     except ErrorReturnCode as err:
         # Forward exit code without traceback
         sys.exit(err.exit_code)
@@ -44,8 +36,7 @@ def check_ruff() -> None:
 def check_basedpyright() -> None:
     print("Type checking codebase")
     try:
-        basedpyright = detect_basedpyright()
-        basedpyright.inherit_out().exec()
+        BasedPyright().check()
     except ErrorReturnCode as err:
         # Forward exit code without traceback
         sys.exit(err.exit_code)
@@ -53,35 +44,27 @@ def check_basedpyright() -> None:
 
 def check_license_headers() -> None:
     print("Checking license headers")
-    git = detect_git()
+    git = Git()
 
-    capture_stdout = StringIO()
-    git.args("rev-parse", "HEAD").stdout(capture_stdout).stderr(sys.stderr).exec()
-    head_commit_hash = capture_stdout.getvalue().strip()
-
-    capture_stdout = StringIO()
-    git.args("rev-parse", "--abbrev-ref", "HEAD").stdout(capture_stdout).exec()
-    current_branch_name = capture_stdout.getvalue().strip()
+    head_commit_hash = git.head()
+    current_branch_name = git.current_branch()
 
     branch_name = f"automation/lint-{head_commit_hash}"
     try:
         # Prepare the branch
-        git_branch_delete(branch_name)
-        git.args("checkout", "-b", branch_name).inherit().exec()
+        git.branch_delete(branch_name)
+        git.checkout_new_branch(branch_name)
 
         # Apply headers licence
-        uv = detect_uv()
-        uv.args("run", "poe", "project:license").inherit().exec()
+        Uv().run_poe("project:license")
 
         # Validate
-        capture_stdout = StringIO()
-        git.args("status", "-s").stdout(capture_stdout).stderr(sys.stderr).exec()
-        changes = capture_stdout.getvalue().strip()
+        changes = git.status_short()
         if changes:
             fatal(f"Apply headers license to:\n{changes}")
     finally:
-        git.args("checkout", current_branch_name).exec()
-        git_branch_delete(branch_name)
+        git.checkout(current_branch_name)
+        git.branch_delete(branch_name)
 
 
 def run() -> None:

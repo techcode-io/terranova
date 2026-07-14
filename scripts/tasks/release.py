@@ -19,9 +19,11 @@ import re
 import sys
 from pathlib import Path
 
+from scripts.binds.gh import Gh
+from scripts.binds.git import Git
+from scripts.binds.uv import Uv
+from scripts.utils import Constants
 from terranova.process import ErrorReturnCode
-
-from scripts.utils import Constants, detect_gh, detect_git, project_version
 
 
 def __set_version(version: str) -> None:
@@ -84,59 +86,38 @@ def pre() -> None:
     # TODO: if you change the branch_name, please update the
     #       condition at .github/workflows/ci.yml
     branch_name = f"feat/pre-release-v{release_version}"
-    git = detect_git()
-    git.args("checkout", "-b", branch_name).inherit_out().exec()
+    git = Git()
+    git.checkout_new_branch(branch_name)
 
     # Update all files
     __set_version(release_version)
 
     # Push release branch
-    git.args("add", "--all").inherit_out().exec()
-    (
-        git.args(
-            "commit", "-m", f"release: terranova v{release_version}", "--no-verify"
-        )
-        .inherit_out()
-        .exec()
-    )
-    git.args("push", "origin", branch_name).inherit_out().exec()
+    git.add_all()
+    git.commit(f"release: terranova v{release_version}", no_verify=True)
+    git.push("origin", branch_name)
 
     # Create a PR
-    gh = detect_gh()
-    (
-        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
-        .inherit_out()
-        .exec()
-    )
+    Gh().pr_create(base="main", head=branch_name)
 
 
 def run() -> None:
     # Read project version
-    release_version = project_version()
+    release_version = Uv().project_version()
 
     # Create the release tag
     try:
-        git = detect_git()
-        git.args("tag", release_version).exec()
-        git.args("push", "origin", release_version).exec()
+        git = Git()
+        git.tag(release_version)
+        git.push("origin", release_version, inherit_out=False)
     except ErrorReturnCode:
         return print(
             f"The release `v{release_version}` already exists.", file=sys.stderr
         )
 
     # Create the release
-    args = [
-        "release",
-        "create",
-        "--generate-notes",
-        "--latest",
-        f"--title=terranova v{release_version}",
-        release_version,
-    ]
     binaries = [file.absolute().as_posix() for file in Path(".").glob("./terranova-*")]
-    args.extend(binaries)
-    gh = detect_gh()
-    gh.args(*args).inherit_out().exec()
+    Gh().release_create(release_version, f"terranova v{release_version}", binaries)
 
 
 def post() -> None:
@@ -153,25 +134,16 @@ def post() -> None:
     # TODO: if you change the branch_name, please update the
     #       condition at .github/workflows/ci.yml
     branch_name = f"feat/post-release-v{next_version}"
-    git = detect_git()
-    git.args("checkout", "-b", branch_name).inherit_out().exec()
+    git = Git()
+    git.checkout_new_branch(branch_name)
 
     # Update all files
     __set_version(next_version)
 
     # Push changes
-    git.args("add", "--all").inherit_out().exec()
-    (
-        git.args("commit", "-m", "chore: prepare for next iteration", "--no-verify")
-        .inherit_out()
-        .exec()
-    )
-    git.args("push", "origin", branch_name).inherit_out().exec()
+    git.add_all()
+    git.commit("chore: prepare for next iteration", no_verify=True)
+    git.push("origin", branch_name)
 
     # Create a PR
-    gh = detect_gh()
-    (
-        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
-        .inherit_out()
-        .exec()
-    )
+    Gh().pr_create(base="main", head=branch_name)
