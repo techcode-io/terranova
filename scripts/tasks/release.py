@@ -18,19 +18,25 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Final
 
+from scripts.binds.gh import Gh
+from scripts.binds.git import Git
+from scripts.binds.uv import Uv
 from terranova.process import ErrorReturnCode
 
-from scripts.utils import Constants, detect_gh, detect_git, project_version
+PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
+TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")
 
 
 def __set_version(version: str) -> None:
+    """Update version in __init__.py and pyproject.toml."""
     # Update app version
     try:
-        data = Constants.TERRANOVA_INIT_PATH.read_text()
+        data = TERRANOVA_INIT_PATH.read_text()
     except Exception as err:
         print(
-            f"The `{Constants.TERRANOVA_INIT_PATH.as_posix()}` can't be read",
+            f"The `{TERRANOVA_INIT_PATH.as_posix()}` can't be read",
             file=sys.stderr,
         )
         raise err
@@ -39,36 +45,37 @@ def __set_version(version: str) -> None:
         r"__version__ = \"(.*)\"", f'__version__ = "{version}"', data, count=1
     )
     try:
-        Constants.TERRANOVA_INIT_PATH.write_text(data)
+        TERRANOVA_INIT_PATH.write_text(data)
     except Exception as err:
         print(
-            f"The `{Constants.TERRANOVA_INIT_PATH.as_posix()}` file can't be written",
+            f"The `{TERRANOVA_INIT_PATH.as_posix()}` file can't be written",
             file=sys.stderr,
         )
         raise err
 
     # Update project version
     try:
-        data = Constants.PYPROJECT_PATH.read_text()
+        data = PYPROJECT_PATH.read_text()
     except Exception as err:
         print(
-            f"The `{Constants.PYPROJECT_PATH.as_posix()}` can't be read",
+            f"The `{PYPROJECT_PATH.as_posix()}` can't be read",
             file=sys.stderr,
         )
         raise err
 
     data = re.sub(r"version = \"(.+)\"", f'version = "{version}"', data, count=1)
     try:
-        Constants.PYPROJECT_PATH.write_text(data)
+        PYPROJECT_PATH.write_text(data)
     except Exception as err:
         print(
-            f"The `{Constants.PYPROJECT_PATH.as_posix()}` file can't be written",
+            f"The `{PYPROJECT_PATH.as_posix()}` file can't be written",
             file=sys.stderr,
         )
         raise err
 
 
 def pre() -> None:
+    """Create a release branch and PR to prepare for release."""
     # Ensure we have inputs
     release_version = os.getenv("RELEASE_VERSION")
     if not release_version:
@@ -84,62 +91,43 @@ def pre() -> None:
     # TODO: if you change the branch_name, please update the
     #       condition at .github/workflows/ci.yml
     branch_name = f"feat/pre-release-v{release_version}"
-    git = detect_git()
-    git.args("checkout", "-b", branch_name).inherit_out().exec()
+    git = Git()
+    git.checkout_new_branch(branch_name)
 
     # Update all files
     __set_version(release_version)
 
     # Push release branch
-    git.args("add", "--all").inherit_out().exec()
-    (
-        git.args(
-            "commit", "-m", f"release: terranova v{release_version}", "--no-verify"
-        )
-        .inherit_out()
-        .exec()
-    )
-    git.args("push", "origin", branch_name).inherit_out().exec()
+    git.add_all()
+    git.commit(f"release: terranova v{release_version}", no_verify=True)
+    git.push("origin", branch_name)
 
     # Create a PR
-    gh = detect_gh()
-    (
-        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
-        .inherit_out()
-        .exec()
-    )
+    Gh().pr_create(base="main", head=branch_name)
 
 
 def run() -> None:
+    """Create a release tag and GitHub release with binaries."""
     # Read project version
-    release_version = project_version()
+    release_version = Uv().project_version()
 
     # Create the release tag
     try:
-        git = detect_git()
-        git.args("tag", release_version).exec()
-        git.args("push", "origin", release_version).exec()
+        git = Git()
+        git.tag(release_version)
+        git.push("origin", release_version)
     except ErrorReturnCode:
         return print(
             f"The release `v{release_version}` already exists.", file=sys.stderr
         )
 
     # Create the release
-    args = [
-        "release",
-        "create",
-        "--generate-notes",
-        "--latest",
-        f"--title=terranova v{release_version}",
-        release_version,
-    ]
     binaries = [file.absolute().as_posix() for file in Path(".").glob("./terranova-*")]
-    args.extend(binaries)
-    gh = detect_gh()
-    gh.args(*args).inherit_out().exec()
+    Gh().release_create(release_version, f"terranova v{release_version}", binaries)
 
 
 def post() -> None:
+    """Prepare for the next development iteration after release."""
     # Ensure we have inputs
     next_version = os.getenv("NEXT_VERSION")
     if not next_version:
@@ -153,25 +141,16 @@ def post() -> None:
     # TODO: if you change the branch_name, please update the
     #       condition at .github/workflows/ci.yml
     branch_name = f"feat/post-release-v{next_version}"
-    git = detect_git()
-    git.args("checkout", "-b", branch_name).inherit_out().exec()
+    git = Git()
+    git.checkout_new_branch(branch_name)
 
     # Update all files
     __set_version(next_version)
 
     # Push changes
-    git.args("add", "--all").inherit_out().exec()
-    (
-        git.args("commit", "-m", "chore: prepare for next iteration", "--no-verify")
-        .inherit_out()
-        .exec()
-    )
-    git.args("push", "origin", branch_name).inherit_out().exec()
+    git.add_all()
+    git.commit("chore: prepare for next iteration", no_verify=True)
+    git.push("origin", branch_name)
 
     # Create a PR
-    gh = detect_gh()
-    (
-        gh.args("pr", "create", "--fill", "--base=main", f"--head={branch_name}")
-        .inherit_out()
-        .exec()
-    )
+    Gh().pr_create(base="main", head=branch_name)

@@ -59,7 +59,7 @@ reportUnusedCallResult = false
 
 [tool.poe.tasks."env:configure"]
 help = "Setup project environment."
-script = "scripts.env:configure"
+script = "scripts.tasks.env:configure"
 
 [tool.poe.tasks."project:upgrade"]
 help = "Upgrade project dependencies."
@@ -90,11 +90,11 @@ interpreter = "python"
 
 [tool.poe.tasks.generate]
 help = "Generate pyinstaller config."
-script = "scripts.generate:run"
+script = "scripts.tasks.generate:run"
 
 [tool.poe.tasks.lint]
 help = "Lint code project."
-script = "scripts.lint:run"
+script = "scripts.tasks.lint:run"
 
 [tool.poe.tasks.fmt]
 help = "Format code project."
@@ -106,7 +106,7 @@ sequence = [
 [tool.poe.tasks.build]
 deps = ["env:wipe"]
 help = "Build standalone binary."
-script = "scripts.build:run"
+script = "scripts.tasks.build:run"
 
 [tool.poe.tasks."test"]
 help = "Run all tests."
@@ -118,12 +118,12 @@ cmd = "pytest --junitxml=reports/junit-report.xml -n=auto --timeout=900 --dist=l
 
 [tool.poe.tasks."release:pre"]
 help = "Create a PR with changes for release."
-script = "scripts.release:pre"
+script = "scripts.tasks.release:pre"
 
 [tool.poe.tasks."release"]
 help = "Create a new terranova release."
-script = "scripts.release:run"
+script = "scripts.tasks.release:run"
 
 [tool.poe.tasks."release:post"]
 help = "Prepare next iteration."
-script = "scripts.release:post"
+script = "scripts.tasks.release:post"

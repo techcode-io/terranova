@@ -14,13 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-from typing import NoReturn
+from scripts.utils import fatal
+from terranova.process import Bind, CommandNotFound
 
 
-def fatal(msg: str, err: Exception | None = None) -> NoReturn:
-    """Print error message on stderr and die."""
-    print(msg, file=sys.stderr)
-    if err:
-        print(err, file=sys.stderr)
-    sys.exit(1)
+class Ruff(Bind):
+    """Represents a bind to ruff command."""
+
+    def __init__(self) -> None:
+        """Init ruff bind."""
+        try:
+            super().__init__("ruff")
+        except CommandNotFound as err:
+            fatal("detect ruff binary", err)
+
+    def check(self, path: str) -> None:
+        """
+        Lint a path.
+
+        Raises:
+            ErrorReturnCode: if lint violations are found.
+        """
+        self._cmd.args("check", path).inherit_out().exec()

@@ -14,9 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from scripts.utils import detect_pre_commit
+from scripts.binds.pyinstaller import PyInstaller
 
 
-def configure() -> None:
-    pre_commit = detect_pre_commit()
-    pre_commit.args("install").inherit_out().exec()
+def run() -> None:
+    """Generate PyInstaller configuration with included data files."""
+    add_data = (
+        ("src/terranova/schemas/", "terranova/schemas/"),
+        ("src/terranova/templates/", "terranova/templates/"),
+    )
+    PyInstaller().generate(add_data=add_data)

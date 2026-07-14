@@ -14,13 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-from typing import NoReturn
+from scripts.binds.pre_commit import PreCommit
 
 
-def fatal(msg: str, err: Exception | None = None) -> NoReturn:
-    """Print error message on stderr and die."""
-    print(msg, file=sys.stderr)
-    if err:
-        print(err, file=sys.stderr)
-    sys.exit(1)
+def configure() -> None:
+    """Install and configure pre-commit hooks."""
+    PreCommit().install()

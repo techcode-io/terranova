@@ -14,13 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-from typing import NoReturn
+from scripts.utils import fatal
+from terranova.process import Bind, CommandNotFound
 
 
-def fatal(msg: str, err: Exception | None = None) -> NoReturn:
-    """Print error message on stderr and die."""
-    print(msg, file=sys.stderr)
-    if err:
-        print(err, file=sys.stderr)
-    sys.exit(1)
+class BasedPyright(Bind):
+    """Represents a bind to basedpyright command."""
+
+    def __init__(self) -> None:
+        """Init basedpyright bind."""
+        try:
+            super().__init__("basedpyright")
+        except CommandNotFound as err:
+            fatal("detect basedpyright binary", err)
+
+    def check(self) -> None:
+        """
+        Type check the project.
+
+        Raises:
+            ErrorReturnCode: if type errors are found.
+        """
+        self._cmd.inherit_out().exec()

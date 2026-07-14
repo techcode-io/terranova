@@ -14,13 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import sys
-from typing import NoReturn
+from scripts.utils import fatal
+from terranova.process import Bind, CommandNotFound
 
 
-def fatal(msg: str, err: Exception | None = None) -> NoReturn:
-    """Print error message on stderr and die."""
-    print(msg, file=sys.stderr)
-    if err:
-        print(err, file=sys.stderr)
-    sys.exit(1)
+class PreCommit(Bind):
+    """Represents a bind to pre-commit command."""
+
+    def __init__(self) -> None:
+        """Init pre-commit bind."""
+        try:
+            super().__init__("pre-commit")
+        except CommandNotFound as err:
+            fatal("detect pre-commit binary", err)
+
+    def install(self) -> None:
+        """Install the pre-commit hooks."""
+        self._cmd.args("install").inherit_out().exec()
