@@ -28,6 +28,26 @@ class PyInstaller(Bind):
         except CommandNotFound as err:
             fatal("detect pyinstaller binary", err)
 
-    def run(self, *args: str) -> None:
-        """Run pyinstaller with the given arguments."""
+    def build(self, spec: str) -> None:
+        """Build binary from a spec file."""
+        self._cmd.args(spec).inherit_out().exec()
+
+    def generate(
+        self,
+        exclude_modules: tuple[str, ...] = (),
+        hidden_imports: tuple[str, ...] = (),
+        add_data: tuple[tuple[str, str], ...] = (),
+    ) -> None:
+        """Generate pyinstaller config and build binary."""
+        args = ["-n", "terranova", "--onefile", "--noconfirm", "--optimize=1"]
+        for exclude_module in exclude_modules:
+            args.extend(["--exclude-module", exclude_module])
+
+        for hidden_import in hidden_imports:
+            args.extend(["--hidden-import", hidden_import])
+
+        for src, dst in add_data:
+            args.extend(["--add-data", f"{src}:{dst}"])
+
+        args.append("./bin/terranova")
         self._cmd.args(*args).inherit_out().exec()

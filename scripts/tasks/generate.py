@@ -18,22 +18,8 @@ from scripts.binds.pyinstaller import PyInstaller
 
 
 def run() -> None:
-    args = ["-n", "terranova", "--onefile", "--noconfirm", "--optimize=1"]
-    exclude_modules = ()
-    for exclude_module in exclude_modules:
-        args.extend(["--exclude-module", exclude_module])
-
-    hidden_imports = ()
-    for hidden_import in hidden_imports:
-        args.extend(["--hidden-import", hidden_import])
-
-    args.extend(
-        [
-            "--add-data",
-            "src/terranova/schemas/:terranova/schemas/",
-            "--add-data",
-            "src/terranova/templates/:terranova/templates/",
-            "./bin/terranova",
-        ]
+    add_data = (
+        ("src/terranova/schemas/", "terranova/schemas/"),
+        ("src/terranova/templates/", "terranova/templates/"),
     )
-    PyInstaller().run(*args)
+    PyInstaller().generate(add_data=add_data)

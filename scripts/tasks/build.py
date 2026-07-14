@@ -42,7 +42,7 @@ def run() -> None:
     system = platform.system().lower()
     match system:
         case "darwin":
-            PyInstaller().run("terranova.spec")
+            PyInstaller().build("terranova.spec")
             arch = platform.machine()
             arch = "amd64" if arch == "x86_64" else arch
             Path("./dist/terranova").replace(
