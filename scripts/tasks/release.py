@@ -18,21 +18,25 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Final
 
 from scripts.binds.gh import Gh
 from scripts.binds.git import Git
 from scripts.binds.uv import Uv
-from scripts.utils import Constants
 from terranova.process import ErrorReturnCode
+
+PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
+TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")
 
 
 def __set_version(version: str) -> None:
+    """Update version in __init__.py and pyproject.toml."""
     # Update app version
     try:
-        data = Constants.TERRANOVA_INIT_PATH.read_text()
+        data = TERRANOVA_INIT_PATH.read_text()
     except Exception as err:
         print(
-            f"The `{Constants.TERRANOVA_INIT_PATH.as_posix()}` can't be read",
+            f"The `{TERRANOVA_INIT_PATH.as_posix()}` can't be read",
             file=sys.stderr,
         )
         raise err
@@ -41,36 +45,37 @@ def __set_version(version: str) -> None:
         r"__version__ = \"(.*)\"", f'__version__ = "{version}"', data, count=1
     )
     try:
-        Constants.TERRANOVA_INIT_PATH.write_text(data)
+        TERRANOVA_INIT_PATH.write_text(data)
     except Exception as err:
         print(
-            f"The `{Constants.TERRANOVA_INIT_PATH.as_posix()}` file can't be written",
+            f"The `{TERRANOVA_INIT_PATH.as_posix()}` file can't be written",
             file=sys.stderr,
         )
         raise err
 
     # Update project version
     try:
-        data = Constants.PYPROJECT_PATH.read_text()
+        data = PYPROJECT_PATH.read_text()
     except Exception as err:
         print(
-            f"The `{Constants.PYPROJECT_PATH.as_posix()}` can't be read",
+            f"The `{PYPROJECT_PATH.as_posix()}` can't be read",
             file=sys.stderr,
         )
         raise err
 
     data = re.sub(r"version = \"(.+)\"", f'version = "{version}"', data, count=1)
     try:
-        Constants.PYPROJECT_PATH.write_text(data)
+        PYPROJECT_PATH.write_text(data)
     except Exception as err:
         print(
-            f"The `{Constants.PYPROJECT_PATH.as_posix()}` file can't be written",
+            f"The `{PYPROJECT_PATH.as_posix()}` file can't be written",
             file=sys.stderr,
         )
         raise err
 
 
 def pre() -> None:
+    """Create a release branch and PR to prepare for release."""
     # Ensure we have inputs
     release_version = os.getenv("RELEASE_VERSION")
     if not release_version:
@@ -102,6 +107,7 @@ def pre() -> None:
 
 
 def run() -> None:
+    """Create a release tag and GitHub release with binaries."""
     # Read project version
     release_version = Uv().project_version()
 
@@ -109,7 +115,7 @@ def run() -> None:
     try:
         git = Git()
         git.tag(release_version)
-        git.push("origin", release_version, inherit_out=False)
+        git.push("origin", release_version)
     except ErrorReturnCode:
         return print(
             f"The release `v{release_version}` already exists.", file=sys.stderr
@@ -121,6 +127,7 @@ def run() -> None:
 
 
 def post() -> None:
+    """Prepare for the next development iteration after release."""
     # Ensure we have inputs
     next_version = os.getenv("NEXT_VERSION")
     if not next_version:

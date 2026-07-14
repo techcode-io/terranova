@@ -49,12 +49,9 @@ class Git(Bind):
         self._cmd.args("rev-parse", "--abbrev-ref", "HEAD").stdout(capture).exec()
         return capture.getvalue().strip()
 
-    def checkout(self, name: str, inherit_out: bool = False) -> None:
+    def checkout(self, name: str) -> None:
         """Switch to an existing branch."""
-        cmd = self._cmd.args("checkout", name)
-        if inherit_out:
-            cmd.inherit_out()
-        cmd.exec()
+        self._cmd.args("checkout", name).inherit_out().exec()
 
     def checkout_new_branch(self, name: str) -> None:
         """Create and switch to a new branch."""
@@ -71,12 +68,9 @@ class Git(Bind):
             args.append("--no-verify")
         self._cmd.args(*args).inherit_out().exec()
 
-    def push(self, remote: str, ref: str, inherit_out: bool = True) -> None:
+    def push(self, remote: str, ref: str) -> None:
         """Push a ref to a remote."""
-        cmd = self._cmd.args("push", remote, ref)
-        if inherit_out:
-            cmd.inherit_out()
-        cmd.exec()
+        self._cmd.args("push", remote, ref).inherit_out().exec()
 
     def tag(self, name: str) -> None:
         """

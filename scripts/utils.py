@@ -14,21 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
 import sys
-from pathlib import Path
-from typing import Final, NoReturn
-
-
-class Constants:
-    """All constants"""
-
-    # pylint: disable=R0903
-    ENCODING_UTF_8: Final[str] = "utf-8"
-    PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
-    PYRIGHTCONFIG_PATH: Final[Path] = Path("pyrightconfig.json")
-    REGISTRY_URL: str = os.getenv("REGISTRY_URL", "local.dev")
-    TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")
+from typing import NoReturn
 
 
 def fatal(msg: str, err: Exception | None = None) -> NoReturn:

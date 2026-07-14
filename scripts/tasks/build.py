@@ -14,19 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import platform
 import sys
 from pathlib import Path
 from time import time
+from typing import Final
 
 from scripts.binds.container import Container
 from scripts.binds.git import Git
 from scripts.binds.pyinstaller import PyInstaller
 from scripts.binds.uv import Uv
-from scripts.utils import Constants
+
+DIST_DIR: Final[Path] = (Path(__file__).parent.parent.parent / "dist").absolute()
+REGISTRY_URL: str = os.getenv("REGISTRY_URL", "local.dev")
 
 
 def run() -> None:
+    """Build standalone terranova binaries for the current platform(s)."""
     commit_hash_short = Git().short_head()
     current_time_epoch = int(time())
     version = Uv().project_version()
@@ -35,9 +40,7 @@ def run() -> None:
     image_id = f"{version}-{current_time_epoch}-{commit_hash_short}"
 
     # Create dist dir
-    local_dist_path = Path("dist")
-    local_dist_path.mkdir(parents=True, exist_ok=False)
-    local_dist_path = local_dist_path.absolute()
+    DIST_DIR.mkdir(parents=True, exist_ok=False)
 
     system = platform.system().lower()
     match system:
@@ -45,7 +48,7 @@ def run() -> None:
             PyInstaller().build("terranova.spec")
             arch = platform.machine()
             arch = "amd64" if arch == "x86_64" else arch
-            Path("./dist/terranova").replace(
+            (DIST_DIR / "terranova").replace(
                 Path(f"./dist/terranova-{version}-{system}-{arch}")
             )
         case "linux":
@@ -53,13 +56,13 @@ def run() -> None:
             container = Container()
             for arch in ["amd64", "arm64"]:
                 platform_arch = f"linux/{arch}"
-                tag = f"{Constants.REGISTRY_URL}/terranova:{image_id}"
+                tag = f"{REGISTRY_URL}/terranova:{image_id}"
                 container.build_image(platform_arch, python_version, tag)
                 container_id = container.run_detached(platform_arch, tag)
                 container.copy_from(
                     container_id,
                     "/opt/terranova/dist/terranova",
-                    local_dist_path / f"terranova-{version}-linux-{arch}",
+                    DIST_DIR / f"terranova-{version}-linux-{arch}",
                 )
                 container.remove(container_id)
         case _:

@@ -18,6 +18,7 @@ from scripts.binds.pyinstaller import PyInstaller
 
 
 def run() -> None:
+    """Generate PyInstaller configuration with included data files."""
     add_data = (
         ("src/terranova/schemas/", "terranova/schemas/"),
         ("src/terranova/templates/", "terranova/templates/"),

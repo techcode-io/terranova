@@ -25,6 +25,7 @@ from terranova.process import ErrorReturnCode
 
 
 def check_ruff() -> None:
+    """Check codebase formatting and style with ruff."""
     print("Checking codebase")
     try:
         Ruff().check("src/terranova")
@@ -34,6 +35,7 @@ def check_ruff() -> None:
 
 
 def check_basedpyright() -> None:
+    """Type check codebase with basedpyright."""
     print("Type checking codebase")
     try:
         BasedPyright().check()
@@ -43,6 +45,7 @@ def check_basedpyright() -> None:
 
 
 def check_license_headers() -> None:
+    """Verify and apply Apache license headers to all project files."""
     print("Checking license headers")
     git = Git()
 
@@ -68,6 +71,7 @@ def check_license_headers() -> None:
 
 
 def run() -> None:
+    """Run all lint checks: formatting, type checking, and license headers."""
     check_ruff()
     check_basedpyright()
     check_license_headers()
