@@ -93,10 +93,10 @@ uv run poe test
 uv run poe test:e2e
 
 # Run single test file
-pytest tests/it/test_resources.py
+pytest tests/it/test_process.py
 
 # Run single test
-pytest tests/it/test_resources.py::test_load_manifest
+pytest tests/it/test_process.py::TestCommand::test_empty
 
 # Run tests matching a pattern
 pytest -k "test_load" -v
@@ -197,23 +197,25 @@ Use the `Log` class from utils:
 ```python
 from terranova.utils import Log
 
-Log.info("message")      # Blue info
-Log.success("message")   # Green success
-Log.warning("message")   # Yellow warning
-Log.error("message")     # Red error
-Log.fatal("action", err) # Red fatal, prints error context
+Log.action("message")          # Yellow action marker
+Log.success("message")         # Green success ("Succeeded to {message}")
+Log.failure("message", err)    # Red failure, prints ExplainedError cause/resolution if present
+Log.fatal("message", err)      # Red failure + raises Exit(1)
 ```
 
 ### Error Handling
 
 Custom exceptions in `src/terranova/exceptions.py`:
 
-- `InvalidManifestError`: Manifest validation failed
+- `ExplainedError`: Base for all errors that carry a `cause` and optional `resolution` shown to the user
+- `ManifestError` / `InvalidManifestError`: Manifest validation failed
 - `InvalidResourcesError`: Resource configuration invalid
 - `MissingManifestError`: Manifest file not found
 - `UnreadableManifestError`: Cannot read manifest
-- `MissingRunbookEnvError`: Required env var for runbook missing
 - `VersionManifestError`: Unsupported manifest version
+- `RunbookError` / `AmbiguousRunbookError`: Multiple runbooks match a name
+- `MissingRunbookError`: Named runbook not found
+- `MissingRunbookEnvError`: Required env var for runbook missing
 
 Wrap jsonschema `ValidationError` in `InvalidManifestError` when catching.
 
@@ -277,3 +279,11 @@ This sets `SharedContext.debug = True` which can be checked in code.
 - Original source: [elastic/terranova](https://github.com/elastic/terranova)
 - Keep copyright notices for both Elasticsearch and current maintainer
 - Follow existing commit message format: `type: description` (e.g., `fix:`, `refactor:`, `chore:`, `docs:`)
+
+## GitHub PR/Issue Creation
+
+Before running `gh pr create`, use the `pr-template-validation` skill to check the PR body against `.github/PULL_REQUEST_TEMPLATE.md`.
+
+Before running `gh issue create`, use the `issue-template-validation` skill to check the issue body against the matching `.github/ISSUE_TEMPLATE/*` template.
+
+Both skills reject placeholder text (TBD/TODO/FIXME/WIP), empty sections, and duplicated content across sections — do not bypass them by creating the PR/issue directly without invoking the skill first.
