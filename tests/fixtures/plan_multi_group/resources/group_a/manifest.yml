@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Plan Multi Group A
+  description: First group for plan fail-at-end tests
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com

@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Get With Selectors Test
+  description: Test resource group for the get command selector filtering
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com

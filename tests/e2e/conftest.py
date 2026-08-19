@@ -14,8 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+from collections.abc import Iterator
+
 import pytest
 from click.testing import CliRunner, Result
+
+
+@pytest.fixture(autouse=True)
+def _restore_cwd() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
+    cwd = os.getcwd()
+    yield
+    os.chdir(cwd)
 
 
 @pytest.fixture

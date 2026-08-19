@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Import Chain Producer
+  description: Produces an output consumed by the consumer group
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com

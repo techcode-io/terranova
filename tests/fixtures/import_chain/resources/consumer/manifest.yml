@@ -1,0 +1,12 @@
+version: "1.2"
+
+metadata:
+  name: Import Chain Consumer
+  description: Imports an output from the producer group
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com
+
+imports:
+  - from: producer
+    import: some_output
+    as: input_var

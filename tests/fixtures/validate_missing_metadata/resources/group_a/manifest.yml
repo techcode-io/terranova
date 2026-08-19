@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Validate Missing Metadata
+  description: A resource block without a metadata comment, for validate fatal-path tests
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com

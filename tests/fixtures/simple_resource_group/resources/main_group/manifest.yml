@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Simple Resource Group
+  description: Minimal manifest for generic single-group e2e command tests
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com

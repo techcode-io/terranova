@@ -1,0 +1,7 @@
+version: "1.0"
+
+metadata:
+  name: Docs Resource Group Test
+  description: Test resource group for the docs command
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com
