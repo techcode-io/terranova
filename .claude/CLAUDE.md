@@ -197,10 +197,12 @@ Use the `Log` class from utils:
 ```python
 from terranova.utils import Log
 
-Log.action("message")          # Yellow action marker
-Log.success("message")         # Green success ("Succeeded to {message}")
-Log.failure("message", err)    # Red failure, prints ExplainedError cause/resolution if present
-Log.fatal("message", err)      # Red failure + raises Exit(1)
+Log.action("message")  # Yellow action marker
+Log.success("message")  # Green success ("Succeeded to {message}")
+Log.failure(
+    "message", err
+)  # Red failure, prints ExplainedError cause/resolution if present
+Log.fatal("message", err)  # Red failure + raises Exit(1)
 ```
 
 ### Error Handling

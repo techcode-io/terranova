@@ -16,7 +16,7 @@
 #
 from pathlib import Path
 from threading import Lock
-from typing import Final, NoReturn, TypeVar, cast, dataclass_transform
+from typing import ClassVar, Final, NoReturn, cast, dataclass_transform
 
 from click.exceptions import Exit
 from rich.console import Console
@@ -25,11 +25,9 @@ from serde import serde as inner_serde
 
 from .exceptions import ExplainedError
 
-_T = TypeVar("_T")
-
 
 @dataclass_transform(field_specifiers=(field,))
-def serde(cls: type[_T]) -> type[_T]:
+def serde[T](cls: type[T]) -> type[T]:
     """Shorthand for serde with type check disabled."""
     return inner_serde(cls, type_check=disabled)
 
@@ -51,7 +49,7 @@ class SharedContext:
     """Utility class to share context globally."""
 
     # Shard context
-    __UNDERLYING: dict[str, object] = {}
+    __UNDERLYING: ClassVar[dict[str, object]] = {}
     __LOCK: Lock = Lock()
 
     @staticmethod
@@ -142,9 +140,9 @@ class Log:
             err_console.print(err)
         if not isinstance(msgs, list):
             msgs = [msgs]
-        err_console.print(f"[red]x[/red] Failed to {str(msgs[0])}")
+        err_console.print(f"[red]x[/red] Failed to {msgs[0]!s}")
         for msg in msgs[1:]:
-            err_console.print(f"  {str(msg)}")
+            err_console.print(f"  {msg!s}")
 
         # Render explained error
         if err:

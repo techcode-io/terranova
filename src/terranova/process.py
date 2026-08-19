@@ -24,11 +24,12 @@ import subprocess
 import sys
 import threading
 from asyncio import Task, create_task, gather, wait_for
+from collections.abc import Callable
 from contextlib import suppress
 from io import TextIOBase
 from pathlib import Path
 from threading import Thread
-from typing import IO, Callable, Self, TextIO, overload, Protocol
+from typing import IO, Protocol, Self, TextIO, overload
 
 from terranova.io import close
 
@@ -112,12 +113,12 @@ class EnvCmd:
         self.__build: dict[str, str] = {}
 
     @staticmethod
-    def empty() -> "EnvCmd":
+    def empty() -> EnvCmd:
         """Create an empty env command."""
         return EnvCmd()
 
     @staticmethod
-    def inherit(predicate: Callable[[str, str], bool] | None = None) -> "EnvCmd":
+    def inherit(predicate: Callable[[str, str], bool] | None = None) -> EnvCmd:
         """Create an env command that inherit environment variables from the current process."""
         env = EnvCmd()
         if predicate:
@@ -149,12 +150,12 @@ class PathCmd:
         self.__build: list[str] = []
 
     @staticmethod
-    def empty() -> "PathCmd":
+    def empty() -> PathCmd:
         """Create an empty path command."""
         return PathCmd()
 
     @staticmethod
-    def inherit() -> "PathCmd":
+    def inherit() -> PathCmd:
         """Create a path command that inherit the PATH environment variable from the current process."""
         path = PathCmd()
         path.__build = os.environ.get("PATH", "").split(os.pathsep)
@@ -389,7 +390,7 @@ class Command:
         self.__observers.append(observer)
         return self
 
-    def copy(self, cmd: "Command") -> Self:
+    def copy(self, cmd: Command) -> Self:
         """Copy all parameters from another command."""
         self.__env = cmd.__env.copy()
         self.__cwd = cmd.__cwd
@@ -429,7 +430,7 @@ class Command:
         if redirect is None:
             return subprocess.DEVNULL
         if isinstance(redirect, Path):
-            return redirect.open("wb")  # noqa: SIM115
+            return redirect.open("wb")
         if isinstance(redirect, TextIOBase):
             try:
                 return redirect.fileno()
@@ -541,7 +542,7 @@ class Command:
         process: SyncProcess,
         io_threads: list[Thread],
         opened_files: list[IO[bytes]],
-        observers: "list[ProcessObserver]",
+        observers: list[ProcessObserver],
     ) -> None:
         """Start a background thread to clean up resources after process exits.
 
@@ -691,7 +692,7 @@ class Command:
 
         return create_task(forward())
 
-    async def __async_handle_stdin(self, process: "AsyncProcess") -> Task[None] | None:
+    async def __async_handle_stdin(self, process: AsyncProcess) -> Task[None] | None:
         """Handle async stdin input from Queue or string.
 
         Args:
@@ -722,7 +723,7 @@ class Command:
 
     def __async_handle_stdout_stderr(
         self,
-        process: "AsyncProcess",
+        process: AsyncProcess,
     ) -> list[Task[None]]:
         """Create forwarding tasks for stdout and stderr.
 
@@ -747,7 +748,7 @@ class Command:
 
     async def __create_io_tasks(
         self,
-        process: "AsyncProcess",
+        process: AsyncProcess,
     ) -> list[asyncio.Task[None]]:
         """Start tasks for forwarding I/O to callbacks/StringIO.
 
@@ -769,10 +770,10 @@ class Command:
 
     @staticmethod
     def __create_gc_task(
-        process: "AsyncProcess",
+        process: AsyncProcess,
         io_tasks: list[asyncio.Task[None]],
         opened_files: list[IO[bytes]],
-        observers: "list[ProcessObserver]",
+        observers: list[ProcessObserver],
     ) -> None:
         """Clean up resources after async process completes.
 
@@ -799,7 +800,7 @@ class Command:
 
         create_task(garbage_collector())
 
-    async def aexec(self, wait_completion: bool = True) -> "AsyncProcess":
+    async def aexec(self, wait_completion: bool = True) -> AsyncProcess:
         """
         Run the command asynchronously and return asyncio.subprocess.Process directly.
 
@@ -848,7 +849,7 @@ class Command:
             try:
                 try:
                     await asyncio.wait_for(process.wait(), timeout=self.__timeout)
-                except asyncio.TimeoutError as err:
+                except TimeoutError as err:
                     assert self.__timeout is not None
                     raise TimeoutException(
                         timeout=self.__timeout, cmd=full_cmd
@@ -866,7 +867,7 @@ class Command:
                     process.terminate()
                     try:
                         await asyncio.wait_for(process.wait(), timeout=10)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         process.kill()
                 raise
             finally:
