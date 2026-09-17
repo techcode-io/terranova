@@ -176,6 +176,32 @@ jobs:
           sudo apt-get install -qyf
           terranova --version || exit 1
 
+  sanitize-rpm:
+    needs:
+      - package-rpm
+    strategy:
+      matrix:
+        os:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+    runs-on: ${{ matrix.os.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: terranova-package-rpm-${{ matrix.os.target }}
+          path: dist
+
+      - name: Verify rpm x86_64 install
+        run: |
+          sudo apt-get install -qy rpm
+          sudo rpm -i dist/terranova*x86_64.rpm
+          terranova --version || exit 1
+
   sanitize-tarball:
     needs:
       - test
