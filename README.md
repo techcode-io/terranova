@@ -83,37 +83,35 @@ uv run poe fmt
 
 ## 📖 Usage
 
-### Single-line installation
+### How to install on Linux
 
-```shell
-curl -sSL https://raw.githubusercontent.com/techcode-io/terranova/0.7.0/install.sh | sh -s
+Releases ship `.deb` and `.rpm` packages that install `terranova` under `/opt/terranova`
+and symlink it into `/usr/bin/terranova`.
+
+```bash
+# Debian/Ubuntu (amd64 or arm64)
+gh release download --repo techcode-io/terranova -p '*_amd64.deb' -O terranova.deb
+sudo dpkg -i terranova.deb
+
+# Fedora/RHEL (amd64 or arm64)
+gh release download --repo techcode-io/terranova -p '*.x86_64.rpm' -O terranova.rpm
+sudo rpm -i terranova.rpm
 ```
 
-If you use `wget` instead:
-
-```shell
-wget -qO- https://raw.githubusercontent.com/techcode-io/terranova/0.7.0/install.sh | sh -s
-```
-
-That will download `terranova`, put it inside `/usr/local/bin/` and give it execution rights with `chmod`.
-
-### How to install as Standalone
+### How to install on macOS
 
 ```bash
 # For MacOSX Apple Silicon
-gh release download 0.7.0 -p '*-darwin-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download --repo techcode-io/terranova -p '*-darwin-arm64.tar.gz' -O terranova.tar.gz
 
 # For MacOSX Intel
-gh release download 0.7.0 -p '*-darwin-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
+gh release download --repo techcode-io/terranova -p '*-darwin-amd64.tar.gz' -O terranova.tar.gz
 
-# For Linux arm64
-gh release download 0.7.0 -p '*-linux-arm64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
-
-# For Linux amd64
-gh release download 0.7.0 -p '*-linux-amd64' -O /usr/local/bin/terranova --clobber --repo techcode-io/terranova
-
-# Make it executable
-chmod +x /usr/local/bin/terranova
+# Extract and install
+mkdir -p /usr/local/opt/terranova
+tar -C /usr/local/opt/terranova -xzf terranova.tar.gz
+chmod +x /usr/local/opt/terranova/terranova
+ln -sf /usr/local/opt/terranova/terranova /usr/local/bin/terranova
 ```
 
 ### Define an arbitrary resource layout

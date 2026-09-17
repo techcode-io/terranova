@@ -40,6 +40,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
+          path: dist
 
       - name: Install environment
         uses: ./.github/workflows/env-install

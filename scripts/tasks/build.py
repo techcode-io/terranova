@@ -14,56 +14,54 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
 import platform
-import sys
+import stat
 from pathlib import Path
-from time import time
 from typing import Final
 
-from scripts.binds.container import Container
-from scripts.binds.git import Git
 from scripts.binds.pyinstaller import PyInstaller
 from scripts.binds.uv import Uv
+from terranova.process import Command
 
 DIST_DIR: Final[Path] = (Path(__file__).parent.parent.parent / "dist").absolute()
-REGISTRY_URL: str = os.getenv("REGISTRY_URL", "local.dev")
+SPEC_PATH: Final[Path] = Path("terranova.spec")
+DISTRIBUTIONS_TARBALL_PATH: Final[Path] = Path("distributions") / "tarball"
 
 
 def run() -> None:
-    """Build standalone terranova binaries for the current platform(s)."""
-    commit_hash_short = Git().short_head()
-    current_time_epoch = int(time())
+    """Build a standalone terranova bundle for the current platform."""
     version = Uv().project_version()
-    python_version = platform.python_version()
-
-    image_id = f"{version}-{current_time_epoch}-{commit_hash_short}"
 
     # Create dist dir
     DIST_DIR.mkdir(parents=True, exist_ok=False)
 
     system = platform.system().lower()
-    match system:
-        case "darwin":
-            PyInstaller().build("terranova.spec")
-            arch = platform.machine()
-            arch = "amd64" if arch == "x86_64" else arch
-            (DIST_DIR / "terranova").replace(
-                Path(f"./dist/terranova-{version}-{system}-{arch}")
-            )
-        case "linux":
-            # Use cross-build to build both amd64 and arm64 versions.
-            container = Container()
-            for arch in ["amd64", "arm64"]:
-                platform_arch = f"linux/{arch}"
-                tag = f"{REGISTRY_URL}/terranova:{image_id}"
-                container.build_image(platform_arch, python_version, tag)
-                container_id = container.run_detached(platform_arch, tag)
-                container.copy_from(
-                    container_id,
-                    "/opt/terranova/dist/terranova",
-                    DIST_DIR / f"terranova-{version}-linux-{arch}",
-                )
-                container.remove(container_id)
-        case _:
-            print(f"Unsupported system: {system}", file=sys.stderr)
+    spec_name = "macOS" if system == "darwin" else "linux"
+    spec_src = DISTRIBUTIONS_TARBALL_PATH / f"terranova.{spec_name}.spec"
+
+    try:
+        SPEC_PATH.write_text(spec_src.read_text())
+        PyInstaller().build(SPEC_PATH.as_posix())
+    finally:
+        SPEC_PATH.unlink(missing_ok=True)
+
+    # Make terranova executable
+    terranova_exec = DIST_DIR / "terranova" / "terranova"
+    terranova_exec.chmod(terranova_exec.stat().st_mode | stat.S_IEXEC)
+
+    # Check terranova bundle is working
+    Command(terranova_exec).args("--version").inherit_out().exec()
+
+    # Create a tarball for macOS
+    if system == "darwin":
+        arch = platform.machine()
+        arch = "amd64" if arch == "x86_64" else arch
+        bundle_dir = DIST_DIR / f"terranova-{version}-{system}-{arch}"
+        (DIST_DIR / "terranova").replace(bundle_dir)
+        Command("tar").args(
+            "-C",
+            bundle_dir.as_posix(),
+            "-czf",
+            (DIST_DIR / f"terranova-{version}-{system}-{arch}.tar.gz").as_posix(),
+            "./",
+        ).inherit_out().exec()

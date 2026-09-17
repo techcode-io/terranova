@@ -108,15 +108,23 @@ pytest -vv -s tests/it/test_resources.py::test_function_name
 ### Building
 
 ```bash
-# Generate PyInstaller configuration
+# Generate PyInstaller configuration (one .spec per OS under distributions/tarball/)
 uv run poe generate
 
-# Build standalone binary (depends on env:wipe)
+# Build a standalone onedir bundle for the current platform (depends on env:wipe)
 uv run poe build
+
+# Package the Linux bundle into OS packages (requires Docker or Podman; uses nfpm)
+uv run poe package:deb
+uv run poe package:rpm
 
 # Clean build artifacts
 uv run poe env:wipe
 ```
+
+macOS ships as a `.tar.gz` bundle; Linux ships as `.deb`/`.rpm` packages (installed under
+`/opt/terranova` with a `/usr/bin/terranova` symlink) rather than a raw binary. Package
+metadata lives in `distributions/packages/nfpm.{amd64,arm64}.yaml`.
 
 ### Release
 

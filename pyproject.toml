@@ -106,8 +106,24 @@ sequence = [
 
 [tool.poe.tasks.build]
 deps = ["env:wipe"]
-help = "Build standalone binary."
+help = "Build standalone bundle."
 script = "scripts.tasks.build:run"
+
+[tool.poe.tasks."package:deb"]
+control.expr = "sys.platform"
+help = "Build debian packages."
+
+[[tool.poe.tasks."package:deb".switch]]
+case = "linux"
+script = "scripts.tasks.package:deb"
+
+[tool.poe.tasks."package:rpm"]
+control.expr = "sys.platform"
+help = "Build rpm packages."
+
+[[tool.poe.tasks."package:rpm".switch]]
+case = "linux"
+script = "scripts.tasks.package:rpm"
 
 [tool.poe.tasks."test"]
 help = "Run all tests."

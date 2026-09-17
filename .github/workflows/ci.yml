@@ -45,10 +45,15 @@ jobs:
     strategy:
       matrix:
         os:
-          - macos-15
-          - macos-15-intel
-          - ubuntu-latest
-    runs-on: ${{ matrix.os }}
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-amd64
+          - runner: ubuntu-24.04
+            target: linux-amd64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os.runner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -64,7 +69,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: terranova-${{ matrix.os }}
+          name: terranova-tarball-${{ matrix.os.target }}
           path: "dist/*"
 
   test:
@@ -85,7 +90,93 @@ jobs:
       - name: Test
         run: uv run poe test
 
-  sanitize:
+  package-deb:
+    needs:
+      - test
+    strategy:
+      matrix:
+        os:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: terranova-tarball-${{ matrix.os.target }}
+          path: dist
+
+      - name: Build deb packages
+        run: uv run poe package:deb
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: terranova-package-deb-${{ matrix.os.target }}
+          path: "dist/*.deb"
+
+  package-rpm:
+    needs:
+      - test
+    strategy:
+      matrix:
+        os:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+    runs-on: ${{ matrix.os.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: terranova-tarball-${{ matrix.os.target }}
+          path: dist
+
+      - name: Build rpm packages
+        run: uv run poe package:rpm
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: terranova-package-rpm-${{ matrix.os.target }}
+          path: "dist/*.rpm"
+
+  sanitize-deb:
+    needs:
+      - package-deb
+    strategy:
+      matrix:
+        os:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+    runs-on: ${{ matrix.os.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: terranova-package-deb-${{ matrix.os.target }}
+          path: dist
+
+      - name: Verify deb amd64 install
+        run: |
+          sudo dpkg -i dist/terranova*amd64.deb
+          sudo apt-get install -qyf
+          terranova --version || exit 1
+
+  sanitize-tarball:
     needs:
       - test
     strategy:
@@ -93,7 +184,6 @@ jobs:
         os:
           - macos-15
           - macos-15-intel
-          - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -103,29 +193,26 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          pattern: terranova-tarball-darwin-*
           merge-multiple: true
           path: dist
 
-      - name: Verify macOS amd64 binary
+      - name: Verify macOS amd64 install
         run: |
-          chmod +x ./dist/terranova-*-darwin-amd64
-          ./dist/terranova-*-darwin-amd64 --version || exit 1
-        if: runner.arch == 'X64' && runner.os == 'macOS'
+          mkdir -p ~/.local/bin/
+          mkdir -p ~/.local/opt/terranova
+          tar -C ~/.local/opt/terranova -xzf dist/terranova-*amd64.tar.gz
+          chmod +x ~/.local/opt/terranova/terranova
+          ln -sf ~/.local/opt/terranova/terranova ~/.local/bin/terranova
+          ~/.local/bin/terranova --version || exit 1
+        if: runner.arch == 'X64'
 
-      - name: Verify macOS arm64 binary
+      - name: Verify macOS arm64 install
         run: |
-          chmod +x ./dist/terranova-*-darwin-arm64
-          ./dist/terranova-*-darwin-arm64 --version || exit 1
-        if: runner.arch == 'ARM64' && runner.os == 'macOS'
-
-      - name: Verify linux amd64 binary
-        run: |
-          chmod +x ./dist/terranova-*-linux-amd64
-          ./dist/terranova-*-linux-amd64 --version || exit 1
-        if: runner.arch == 'X64' && runner.os == 'Linux'
-
-      - name: Verify linux arm64 binary
-        run: |
-          chmod +x ./dist/terranova-*-linux-arm64
-          ./dist/terranova-*-linux-arm64 --version || exit 1
-        if: runner.arch == 'ARM64' && runner.os == 'Linux'
+          mkdir -p ~/.local/bin/
+          mkdir -p ~/.local/opt/terranova
+          tar -C ~/.local/opt/terranova -xzf dist/terranova-*arm64.tar.gz
+          chmod +x ~/.local/opt/terranova/terranova
+          ln -sf ~/.local/opt/terranova/terranova ~/.local/bin/terranova
+          ~/.local/bin/terranova --version || exit 1
+        if: runner.arch == 'ARM64'
