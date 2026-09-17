@@ -27,51 +27,55 @@ from terranova.process import ErrorReturnCode
 
 PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
 TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")
+DISTRIBUTIONS_NFPM_AMD64_PATH: Final[Path] = Path(
+    "distributions/packages/nfpm.amd64.yaml"
+)
+DISTRIBUTIONS_NFPM_ARM64_PATH: Final[Path] = Path(
+    "distributions/packages/nfpm.arm64.yaml"
+)
+
+
+def __update_file_version(file_path: Path, pattern: str, replacement: str) -> None:
+    """Substitute the version in a file matching a regex pattern."""
+    try:
+        data = file_path.read_text()
+    except Exception as err:
+        print(
+            f"The `{file_path.as_posix()}` can't be read",
+            file=sys.stderr,
+        )
+        raise err
+
+    data = re.sub(pattern, replacement, data, count=1)
+    try:
+        file_path.write_text(data)
+    except Exception as err:
+        print(
+            f"The `{file_path.as_posix()}` file can't be written",
+            file=sys.stderr,
+        )
+        raise err
 
 
 def __set_version(version: str) -> None:
-    """Update version in __init__.py and pyproject.toml."""
+    """Update version in __init__.py, pyproject.toml and the nfpm package configs."""
     # Update app version
-    try:
-        data = TERRANOVA_INIT_PATH.read_text()
-    except Exception as err:
-        print(
-            f"The `{TERRANOVA_INIT_PATH.as_posix()}` can't be read",
-            file=sys.stderr,
-        )
-        raise err
-
-    data = re.sub(
-        r"__version__ = \"(.*)\"", f'__version__ = "{version}"', data, count=1
+    __update_file_version(
+        TERRANOVA_INIT_PATH, r"__version__ = \"(.*)\"", f'__version__ = "{version}"'
     )
-    try:
-        TERRANOVA_INIT_PATH.write_text(data)
-    except Exception as err:
-        print(
-            f"The `{TERRANOVA_INIT_PATH.as_posix()}` file can't be written",
-            file=sys.stderr,
-        )
-        raise err
 
     # Update project version
-    try:
-        data = PYPROJECT_PATH.read_text()
-    except Exception as err:
-        print(
-            f"The `{PYPROJECT_PATH.as_posix()}` can't be read",
-            file=sys.stderr,
-        )
-        raise err
+    __update_file_version(
+        PYPROJECT_PATH, r"version = \"(.+)\"", f'version = "{version}"'
+    )
 
-    data = re.sub(r"version = \"(.+)\"", f'version = "{version}"', data, count=1)
-    try:
-        PYPROJECT_PATH.write_text(data)
-    except Exception as err:
-        print(
-            f"The `{PYPROJECT_PATH.as_posix()}` file can't be written",
-            file=sys.stderr,
-        )
-        raise err
+    # Update nfpm package versions
+    __update_file_version(
+        DISTRIBUTIONS_NFPM_AMD64_PATH, r"version: \"(.+)\"", f'version: "{version}"'
+    )
+    __update_file_version(
+        DISTRIBUTIONS_NFPM_ARM64_PATH, r"version: \"(.+)\"", f'version: "{version}"'
+    )
 
 
 def pre() -> None:
@@ -107,7 +111,7 @@ def pre() -> None:
 
 
 def run() -> None:
-    """Create a release tag and GitHub release with binaries."""
+    """Create a release tag and GitHub release with the built assets."""
     # Read project version
     release_version = Uv().project_version()
 
@@ -122,8 +126,12 @@ def run() -> None:
         )
 
     # Create the release
-    binaries = [file.absolute().as_posix() for file in Path(".").glob("./terranova-*")]
-    Gh().release_create(release_version, f"terranova v{release_version}", binaries)
+    assets = [
+        file.absolute().as_posix()
+        for file in Path("dist").glob("./terranova*")
+        if file.is_file()
+    ]
+    Gh().release_create(release_version, f"terranova v{release_version}", assets)
 
 
 def post() -> None:

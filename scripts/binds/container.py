@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from io import StringIO
 from pathlib import Path
 from typing import override
 
@@ -51,57 +50,3 @@ class Container(Bind):
         if self.__backend == "podman":
             env.add({"BUILDAH_FORMAT": "docker"})
         return Command(cmd_path).env(env.build())
-
-    def build_image(self, platform: str, python_version: str, tag: str) -> None:
-        """Build a multi-platform image via buildx."""
-        (
-            self._cmd.args(
-                "buildx",
-                "build",
-                "--load",
-                "--platform",
-                platform,
-                "--build-arg",
-                f"base_image_version={python_version}",
-                "-t",
-                tag,
-                "-f",
-                "Containerfile",
-                ".",
-            )
-            .inherit_out()
-            .exec()
-        )
-
-    def run_detached(self, platform: str, image: str) -> str:
-        """Run a detached container with a no-op entrypoint and return its id."""
-        capture = StringIO()
-        (
-            self._cmd.args(
-                "run",
-                "-d",
-                "--platform",
-                platform,
-                "--entrypoint=cat",
-                image,
-            )
-            .stdout(capture)
-            .exec()
-        )
-        return capture.getvalue().strip()
-
-    def copy_from(self, container_id: str, container_path: str, dest: Path) -> None:
-        """Copy a path out of a container."""
-        (
-            self._cmd.args(
-                "cp",
-                f"{container_id}:{container_path}",
-                dest.as_posix(),
-            )
-            .inherit_out()
-            .exec()
-        )
-
-    def remove(self, container_id: str) -> None:
-        """Remove a container."""
-        self._cmd.args("rm", "-f", container_id).exec()

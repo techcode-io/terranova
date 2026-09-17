@@ -31,12 +31,6 @@ class Git(Bind):
         except CommandNotFound as err:
             fatal("detect git binary", err)
 
-    def short_head(self) -> str:
-        """Return the short commit hash of HEAD."""
-        capture = StringIO()
-        self._cmd.args("rev-parse", "--short", "HEAD").stdout(capture).exec()
-        return capture.getvalue().strip()
-
     def head(self) -> str:
         """Return the full commit hash of HEAD."""
         capture = StringIO()

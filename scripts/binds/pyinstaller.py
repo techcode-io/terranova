@@ -39,7 +39,7 @@ class PyInstaller(Bind):
         add_data: tuple[tuple[str, str], ...] = (),
     ) -> None:
         """Generate pyinstaller config and build binary."""
-        args = ["-n", "terranova", "--onefile", "--noconfirm", "--optimize=1"]
+        args = ["-n", "terranova", "--onedir", "--noconfirm", "--optimize=1"]
         for exclude_module in exclude_modules:
             args.extend(["--exclude-module", exclude_module])
 

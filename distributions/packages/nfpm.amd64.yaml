@@ -1,0 +1,24 @@
+name: "terranova"
+arch: "amd64"
+version: "0.7.3-dev"
+section: "default"
+priority: "extra"
+maintainer: "Adrien Mannocci <adrien.mannocci@gmail.com>"
+description: |
+  Terranova is a thin wrapper for Terraform that provides extra tools and logic
+  to handle Terraform configurations at scale.
+vendor: "techcode.io"
+homepage: "https://github.com/techcode-io/terranova"
+license: "Apache-2.0"
+contents:
+  - src: ./dist/terranova/_internal
+    dst: /opt/terranova/_internal
+
+  - src: ./dist/terranova/terranova
+    dst: /opt/terranova/terranova
+    file_info:
+      mode: 0555
+
+  - src: /opt/terranova/terranova
+    dst: /usr/bin/terranova
+    type: symlink

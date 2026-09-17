@@ -14,7 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pathlib import Path
+from typing import Final
+
 from scripts.binds.pyinstaller import PyInstaller
+
+SPEC_PATH: Final[Path] = Path("terranova.spec")
+DISTRIBUTIONS_TARBALL_PATH: Final[Path] = Path("distributions") / "tarball"
 
 
 def run() -> None:
@@ -23,4 +29,6 @@ def run() -> None:
         ("src/terranova/schemas/", "terranova/schemas/"),
         ("src/terranova/templates/", "terranova/templates/"),
     )
-    PyInstaller().generate(add_data=add_data)
+    for system in ("macOS", "linux"):
+        PyInstaller().generate(add_data=add_data)
+        SPEC_PATH.rename(DISTRIBUTIONS_TARBALL_PATH / f"terranova.{system}.spec")
