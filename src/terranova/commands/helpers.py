@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 import os
 from pathlib import Path
-from typing import override
+from typing import cast, override
 
 import click
 from click import Parameter
@@ -24,9 +25,32 @@ from click.exceptions import Exit
 
 from terranova.binds import Terraform
 from terranova.exceptions import InvalidResourcesError, ManifestError
+from terranova.executor import ResourceGroupResult, ResourceGroupTask, create_executor
+from terranova.graph import Wave, build_dependency_graph, compute_waves
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
+from terranova.ui import ParallelProgress
 from terranova.utils import Constants, Log, SharedContext
+
+flat_strategy_option = click.option(
+    "--strategy",
+    help="Execution strategy across resource groups: `sequential` (default) runs "
+    + "one after another; `parallel` runs them concurrently.",
+    type=click.Choice(["sequential", "parallel"], case_sensitive=False),
+    default="sequential",
+)
+"""Shared `--strategy` option for commands with no cross-project dependency
+ordering concern (`fmt`, `validate` - see `terranova.commands.execution.flat_wave`).
+`plan`/`apply` define their own, worded around dependency order."""
+
+flat_group_concurrency_option = click.option(
+    "--group-concurrency",
+    help="With `--strategy parallel`, the maximum number of resource groups run "
+    + "concurrently. Defaults to a sane pool size if unset.",
+    type=int,
+    default=None,
+)
+"""Shared `--group-concurrency` option, paired with `flat_strategy_option`."""
 
 
 class SelectorType(click.ParamType[Selector]):
@@ -60,6 +84,38 @@ def read_manifest(path: Path) -> "ResourcesManifest":
         return ResourcesManifest.from_file(path / Constants.MANIFEST_FILE_NAME)
     except ManifestError as err:
         Log.fatal("read manifest", err)
+
+
+def parse_execution_plan(text: str) -> dict[str, str]:
+    """
+    Parse a saved `.tnplan` file's content into `rel_path -> base64 plan bytes`.
+
+    The file path comes straight from the CLI argument, so its content is
+    untrusted input (hand-edited, corrupted, or from an unrelated JSON file) -
+    validate its shape instead of casting `json.loads()`'s `Any` result
+    straight to `dict[str, str]`, which would just push a confusing failure
+    (e.g. `b64decode()` choking on a non-string value) further downstream.
+
+    Raises:
+        ValueError: if `text` isn't valid JSON.
+        TypeError: if `text` is valid JSON but not a flat object of string values.
+    """
+    raw = cast("object", json.loads(text))
+    if not isinstance(raw, dict):
+        raise TypeError("Not a valid .tnplan file: expected a JSON object.")
+    execution_plan: dict[str, str] = {}
+    for key, value in cast("dict[object, object]", raw).items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise TypeError(
+                "Not a valid .tnplan file: expected string keys and values."
+            )
+        execution_plan[key] = value
+    return execution_plan
+
+
+def write_execution_plan(out: Path, execution_plan: dict[str, str]) -> None:
+    """Write an execution plan to a `.tnplan` file, the counterpart to `parse_execution_plan`."""
+    out.write_text(json.dumps(execution_plan))
 
 
 def discover_resources(
@@ -156,3 +212,55 @@ def extract_output_var(path: str, name: str) -> str:
         return terraform.output(name)
     except ErrorReturnCode as err:
         raise Exit(code=err.exit_code) from err
+
+
+def execute_tasks(
+    strategy: str,
+    tasks: list[ResourceGroupTask],
+    fail_at_end: bool,
+    waves: list[Wave],
+    group_concurrency: int | None,
+) -> list[ResourceGroupResult]:
+    """
+    Run `tasks` with the selected strategy.
+
+    Owns the live status display's lifecycle for the parallel executor - the
+    executor itself never renders anything, see `terranova.ui.ParallelProgress`
+    and `terranova.executor.ExecutorObserver`.
+    """
+    if strategy == "parallel":
+        ui = ParallelProgress(total=len(tasks))
+        executor = create_executor(
+            "parallel", max_workers=group_concurrency, observer=ui
+        )
+        with ui:
+            return executor.run(tasks, fail_at_end, waves=waves)
+    return create_executor("sequential").run(tasks, fail_at_end, waves=waves)
+
+
+def flat_wave(paths: list[tuple[Path, str]]) -> list[Wave]:
+    """
+    A single wave containing every discovered rel_path.
+
+    For commands with no cross-project dependency ordering concern - `fmt` and
+    `validate` never resolve manifest `imports` (they don't call `mount_context`
+    with `import_vars=True`), so there's nothing to build a dependency graph
+    from and every project is safe to run concurrently with every other.
+    """
+    return [[rel_path for _, rel_path in paths]]
+
+
+def read_manifests_and_waves(
+    paths: list[tuple[Path, str]],
+) -> tuple[dict[str, ResourcesManifest], list[Wave]]:
+    """
+    Read every manifest once and compute dependency-ordered waves from it.
+
+    Used by `plan`/`apply` - the only commands that resolve manifest `imports`
+    (via `mount_context(..., import_vars=True)`) and therefore need dependency
+    ordering; see `flat_wave` for commands that don't.
+    """
+    manifests = {rel_path: read_manifest(full_path) for full_path, rel_path in paths}
+    graph = build_dependency_graph(paths, manifests)
+    waves = compute_waves(graph)
+    return manifests, waves

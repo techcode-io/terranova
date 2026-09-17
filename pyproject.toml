@@ -57,6 +57,7 @@ default-groups = ["dev", "build"]
 # non-chained call as an unused result is noise, not a real bug signal.
 reportUnusedCallResult = false
 
+
 [tool.poe.tasks."env:configure"]
 help = "Setup project environment."
 script = "scripts.tasks.env:configure"

@@ -32,6 +32,16 @@ def serde[T](cls: type[T]) -> type[T]:
     return inner_serde(cls, type_check=disabled)
 
 
+def int_or_default(value: object, default: int) -> int:
+    """Coerce an untyped value (e.g. from `json.loads()`) to `int`, or `default`."""
+    return value if isinstance(value, int) else default
+
+
+def str_or_none(value: object) -> str | None:
+    """Coerce an untyped value (e.g. from `json.loads()`) to `str`, or `None`."""
+    return value if isinstance(value, str) else None
+
+
 class Constants:
     """All constants"""
 

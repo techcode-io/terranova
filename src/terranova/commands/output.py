@@ -14,20 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from click.testing import CliRunner
+import click
 
-from terranova import __version__
-from terranova.cli import main
-from tests.e2e.conftest import assert_result
+from terranova.commands.helpers import extract_output_var
 
 
-def test_version(runner: CliRunner) -> None:
-    result = runner.invoke(main, args=["--version"])
-    stdout, _ = assert_result(result)
-    assert f"terranova, version {__version__}" in stdout
-
-
-def test_with_no_command(runner: CliRunner) -> None:
-    result = runner.invoke(main, args=[])
-    assert result.exit_code == 2
-    assert "Commands" in result.stderr
+@click.command("output")
+@click.argument("path", type=str)
+@click.argument("name", type=str)
+def output(path: str, name: str) -> None:
+    """Show output values from your root module."""
+    print(extract_output_var(path, name), end="", flush=True)

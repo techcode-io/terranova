@@ -36,12 +36,31 @@ if out_bytes_b64:
             with open(arg[len("-out="):], "wb") as out_f:
                 out_f.write(base64.b64decode(out_bytes_b64))
 
+exit_code = config.get("exit_code", 0)
+
 stdout = config.get("stdout", "")
+if not stdout and "validate" in sys.argv[1:] and "-json" in sys.argv[1:]:
+    # Default terraform validate -json report, unless a test overrides stdout.
+    if exit_code == 0:
+        stdout = json.dumps(
+            {"valid": True, "error_count": 0, "warning_count": 0, "diagnostics": []}
+        )
+    else:
+        stdout = json.dumps(
+            {
+                "valid": False,
+                "error_count": 1,
+                "warning_count": 0,
+                "diagnostics": [
+                    {"severity": "error", "summary": "fake validation error"}
+                ],
+            }
+        )
 if stdout:
     sys.stdout.write(stdout)
 sys.stdout.flush()
 
-sys.exit(config.get("exit_code", 0))
+sys.exit(exit_code)
 """
 
 

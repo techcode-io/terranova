@@ -87,6 +87,101 @@ def test_apply_with_tnplan_file_round_trips_plan_bytes(
     assert plan_arg_path.name != str(tnplan_file)
 
 
+def test_apply_strategy_parallel_independent_groups_succeeds(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main,
+        args=[
+            "--conf-dir",
+            str(fixture_dir),
+            "apply",
+            "--strategy",
+            "parallel",
+            "--auto-approve",
+        ],
+    )
+    assert result.exit_code == 0
+    # Parallel mode is quiet on success: no per-project "Applying plan:" chatter,
+    # only the live status display (reflected here as the final overall count).
+    assert "Applying plan:" not in result.stdout
+    assert "2/2" in result.stdout
+
+
+def test_apply_strategy_parallel_fail_at_end_runs_all(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    fake_terraform_bin.set_exit_code(1)
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main,
+        args=[
+            "--conf-dir",
+            str(fixture_dir),
+            "apply",
+            "--strategy",
+            "parallel",
+            "--fail-at-end",
+            "--auto-approve",
+        ],
+    )
+    assert result.exit_code == 1
+    # Both projects ran (fail-at-end); failures are always reported even
+    # though parallel mode stays quiet about successes.
+    assert result.stdout.count("failed:") == 2
+
+
+def test_apply_strategy_parallel_without_auto_approve_fails_fast(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    """
+    `--strategy parallel` runs several `terraform apply` processes at once, so
+    none of them can fall back to an interactive approval prompt. Without a
+    saved plan or `--auto-approve`, terranova should refuse up front instead
+    of launching tasks doomed to fail with terraform's own unhelpful
+    "Plan file or auto-approve required" error.
+    """
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main, args=["--conf-dir", str(fixture_dir), "apply", "--strategy", "parallel"]
+    )
+    assert result.exit_code == 1
+    assert not fake_terraform_bin.was_invoked
+
+
+def test_apply_tnplan_with_strategy_parallel_builds_real_graph_from_disk(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    """
+    A saved `.tnplan` file only stores `{rel_path: base64 plan}` pairs, but the
+    manifests (and thus `imports`/dependency order) still exist on disk at the
+    same rel_paths, so `--strategy parallel` can build a real dependency graph
+    for a `.tnplan` apply too - no degrade-to-sequential fallback needed.
+    """
+    _ = fake_terraform_bin
+    plan_bytes = b"saved-plan-bytes"
+    tnplan_file = tmp_path / "saved.tnplan"
+    tnplan_file.write_text(
+        json.dumps({"main_group": base64.b64encode(plan_bytes).decode("ascii")})
+    )
+
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "simple_resource_group"
+    result = runner.invoke(
+        main,
+        args=[
+            "--conf-dir",
+            str(fixture_dir),
+            "apply",
+            str(tnplan_file),
+            "--strategy",
+            "parallel",
+        ],
+    )
+    assert result.exit_code == 0
+
+
 def test_apply_with_malformed_tnplan_file_raises_unhandled_exception(
     runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -108,4 +203,36 @@ def test_apply_with_malformed_tnplan_file_raises_unhandled_exception(
     )
     assert result.exit_code != 0
     assert result.exception is not None
-    assert isinstance(result.exception, json.JSONDecodeError)
+
+
+def test_apply_with_non_object_tnplan_file_raises_type_error(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    """A `.tnplan` file that's valid JSON but not a flat object of strings
+    (e.g. a list, or a value that isn't a string) must not be silently
+    trusted - the plan file path is untrusted external input."""
+    tnplan_file = tmp_path / "not_an_object.tnplan"
+    tnplan_file.write_text(json.dumps(["main_group"]))
+
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "simple_resource_group"
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(fixture_dir), "apply", str(tnplan_file)],
+    )
+    assert result.exit_code != 0
+    assert isinstance(result.exception, TypeError)
+
+
+def test_apply_with_non_string_tnplan_value_raises_type_error(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    tnplan_file = tmp_path / "bad_value.tnplan"
+    tnplan_file.write_text(json.dumps({"main_group": 12345}))
+
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "simple_resource_group"
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(fixture_dir), "apply", str(tnplan_file)],
+    )
+    assert result.exit_code != 0
+    assert isinstance(result.exception, TypeError)

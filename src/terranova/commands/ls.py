@@ -14,20 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from click.testing import CliRunner
+import click
 
-from terranova import __version__
-from terranova.cli import main
-from tests.e2e.conftest import assert_result
+from terranova.commands.helpers import resource_dirs
 
 
-def test_version(runner: CliRunner) -> None:
-    result = runner.invoke(main, args=["--version"])
-    stdout, _ = assert_result(result)
-    assert f"terranova, version {__version__}" in stdout
+@click.command("ls")
+@click.argument("path", type=str, required=False)
+def ls(path: str | None) -> None:
+    """List resources."""
+    # Find all resources manifests
+    paths = resource_dirs(path)
 
-
-def test_with_no_command(runner: CliRunner) -> None:
-    result = runner.invoke(main, args=[])
-    assert result.exit_code == 2
-    assert "Commands" in result.stderr
+    # Display resource paths
+    for full_path, _ in paths:
+        print(full_path)
