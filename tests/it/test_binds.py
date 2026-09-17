@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from click.exceptions import Exit
 
-from terranova.binds import Terraform
+from terranova.binds import (
+    ChangeSummary,
+    ResourceChange,
+    Terraform,
+    TerraformChangeError,
+)
 from terranova.exceptions import InvalidResourcesError
 from terranova.utils import SharedContext
 from tests.conftest import FakeTerraform
@@ -142,16 +148,42 @@ class TestTerraformInit:
 
 
 class TestTerraformValidate:
-    def test_validate_success_no_raise(
+    def test_validate_success_returns_valid_result(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
         fake_terraform_bin.set_exit_code(0)
-        Terraform(tmp_path).validate()
+        result = Terraform(tmp_path).validate()
+        assert result.valid
+        assert result.error_count == 0
+        assert result.diagnostics == ()
 
-    def test_validate_failure_wraps_error_return_code(
+    def test_validate_failure_returns_invalid_result_with_diagnostics(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
         fake_terraform_bin.set_exit_code(1)
+        result = Terraform(tmp_path).validate()
+        assert not result.valid
+        assert result.error_count == 1
+        assert len(result.diagnostics) == 1
+        assert result.diagnostics[0].severity == "error"
+
+    def test_validate_appends_json_flag(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        Terraform(tmp_path).validate()
+        assert "-json" in fake_terraform_bin.captured_argv
+
+    def test_validate_unparseable_report_raises_invalid_resources_error(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout("not valid json")
+        with pytest.raises(InvalidResourcesError):
+            Terraform(tmp_path).validate()
+
+    def test_validate_non_object_report_raises_invalid_resources_error(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout("[1, 2, 3]")
         with pytest.raises(InvalidResourcesError):
             Terraform(tmp_path).validate()
 
@@ -161,15 +193,13 @@ class TestTerraformPlan:
         self,
         tmp_path: Path,
         *,
-        compact_warnings: bool = False,
         input: bool = True,
         no_color: bool = False,
         parallelism: int | None = 10,
         detailed_exitcode: bool = False,
         out: Path | None = None,
-    ) -> None:
-        Terraform(tmp_path).plan(
-            compact_warnings=compact_warnings,
+    ) -> ChangeSummary:
+        return Terraform(tmp_path).plan(
             input=input,
             no_color=no_color,
             parallelism=parallelism,
@@ -211,12 +241,6 @@ class TestTerraformPlan:
         self._plan(tmp_path, input=False)
         assert "-input=false" in fake_terraform_bin.captured_argv
 
-    def test_plan_compact_warnings_flag(
-        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
-    ) -> None:
-        self._plan(tmp_path, compact_warnings=True)
-        assert "-compact-warnings" in fake_terraform_bin.captured_argv
-
     def test_plan_no_color_flag(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
@@ -236,31 +260,273 @@ class TestTerraformPlan:
         self._plan(tmp_path, out=out_path)
         assert f"-out={out_path.as_posix()}" in fake_terraform_bin.captured_argv
 
-
-class TestTerraformApply:
-    def test_apply_default_no_flags(
+    def test_plan_appends_json_flag(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
-        Terraform(tmp_path).apply()
-        assert fake_terraform_bin.captured_argv == ["apply"]
+        self._plan(tmp_path)
+        assert "-json" in fake_terraform_bin.captured_argv
+
+    def test_plan_returns_change_summary(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            '{"type":"change_summary","changes":{"add":2,"change":1,"remove":0}}\n'
+        )
+        summary = self._plan(tmp_path)
+        assert summary.to_add == 2
+        assert summary.to_change == 1
+        assert summary.to_destroy == 0
+
+    def test_plan_counts_planned_change_events(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            "\n".join(
+                [
+                    '{"type":"planned_change","change":{"action":"create"}}',
+                    '{"type":"planned_change","change":{"action":"update"}}',
+                    '{"type":"planned_change","change":{"action":"delete"}}',
+                    '{"type":"planned_change","change":{"action":"create"}}',
+                ]
+            )
+        )
+        summary = self._plan(tmp_path)
+        assert summary.to_add == 2
+        assert summary.to_change == 1
+        assert summary.to_destroy == 1
+
+    def test_plan_collects_resource_changes_from_planned_change_events(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "type": "planned_change",
+                            "change": {
+                                "resource": {"addr": "aws_instance.foo"},
+                                "action": "create",
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "planned_change",
+                            "change": {
+                                "resource": {"addr": "aws_instance.bar"},
+                                "action": "replace",
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "planned_change",
+                            "change": {
+                                "resource": {"addr": "data.aws_ami.baz"},
+                                "action": "read",
+                            },
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "planned_change",
+                            "change": {
+                                "resource": {"addr": "aws_instance.unchanged"},
+                                "action": "no-op",
+                            },
+                        }
+                    ),
+                ]
+            )
+        )
+        summary = self._plan(tmp_path)
+        assert summary.resources == (
+            ResourceChange(address="aws_instance.foo", action="create"),
+            ResourceChange(address="aws_instance.bar", action="replace"),
+        )
+
+    def test_plan_error_raises_terraform_change_error_with_summary(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            '{"type":"diagnostic","@level":"error","@message":"boom"}\n'
+        )
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(TerraformChangeError) as exc_info:
+            self._plan(tmp_path)
+        assert exc_info.value.exit_code == 1
+        assert exc_info.value.summary.has_errors
+        assert "boom" in exc_info.value.summary.diagnostics[0]
+
+    def test_plan_error_with_no_json_diagnostic_falls_back_to_raw_output(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        """
+        Terraform can fail without ever emitting a JSON `diagnostic` event (a
+        crash before -json mode takes effect, a plain-text stderr message,
+        ...). The failure must still carry an explanation instead of a bare,
+        content-free `ChangeSummary`.
+        """
+        fake_terraform_bin.set_stdout("panic: unexpected nil pointer\nstack trace...")
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(TerraformChangeError) as exc_info:
+            self._plan(tmp_path)
+        assert exc_info.value.summary.has_errors
+        assert "panic: unexpected nil pointer" in exc_info.value.summary.diagnostics[0]
+
+    def test_plan_error_with_no_output_at_all_still_explains_exit_code(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(TerraformChangeError) as exc_info:
+            self._plan(tmp_path)
+        assert exc_info.value.summary.has_errors
+        assert "exited with code 1" in exc_info.value.summary.diagnostics[0]
+
+    def test_plan_error_diagnostic_includes_nested_detail_not_just_summary(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        """
+        Regression test: terraform's diagnostic events carry the generic
+        summary at top-level (`@message`) and the actually useful explanation
+        nested under `diagnostic.detail` (e.g. an external program's stderr).
+        Only surfacing `@message` produces content-free, repeated-looking
+        failures like three identical "External Program Execution Failed"
+        lines with no way to tell them apart.
+        """
+        diagnostic_line = json.dumps(
+            {
+                "@level": "error",
+                "@message": "Error: External Program Execution Failed",
+                "type": "diagnostic",
+                "diagnostic": {
+                    "severity": "error",
+                    "summary": "External Program Execution Failed",
+                    "detail": (
+                        "call to external.foo failed with unexpected error: "
+                        'exit status 1. stderr: "connection refused: 10.0.0.5:443"'
+                    ),
+                },
+            }
+        )
+        fake_terraform_bin.set_stdout(diagnostic_line + "\n")
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(TerraformChangeError) as exc_info:
+            self._plan(tmp_path)
+        message = exc_info.value.summary.diagnostics[0]
+        assert "External Program Execution Failed" in message
+        assert "connection refused: 10.0.0.5:443" in message
+
+
+class TestTerraformApply:
+    def test_apply_default_no_flags_is_interactive(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        """
+        Without a saved plan or `-auto-approve`, terraform must be free to
+        prompt for interactive approval on a real terminal - `-json` would
+        disable that prompt outright, so it must be omitted here.
+        """
+        summary = Terraform(tmp_path).apply()
+        argv = fake_terraform_bin.captured_argv
+        assert argv[0] == "apply"
+        assert "-json" not in argv
+        assert summary == ChangeSummary()
 
     def test_apply_with_plan_arg(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
         Terraform(tmp_path).apply(plan="path/to/plan")
-        assert fake_terraform_bin.captured_argv == ["apply", "path/to/plan"]
+        argv = fake_terraform_bin.captured_argv
+        assert "path/to/plan" in argv
+        assert "-json" in argv
 
     def test_apply_auto_approve_flag(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
         Terraform(tmp_path).apply(auto_approve=True)
-        assert "-auto-approve" in fake_terraform_bin.captured_argv
+        argv = fake_terraform_bin.captured_argv
+        assert "-auto-approve" in argv
+        assert "-json" in argv
 
     def test_apply_target_flag(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform
     ) -> None:
-        Terraform(tmp_path).apply(target="aws_instance.foo")
+        Terraform(tmp_path).apply(auto_approve=True, target="aws_instance.foo")
         assert "-target=aws_instance.foo" in fake_terraform_bin.captured_argv
+
+    def test_apply_returns_change_summary(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            '{"type":"change_summary","changes":{"add":1,"change":0,"remove":0}}\n'
+        )
+        summary = Terraform(tmp_path).apply(auto_approve=True)
+        assert summary.to_add == 1
+
+    def test_apply_error_raises_terraform_change_error_with_summary(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform
+    ) -> None:
+        fake_terraform_bin.set_stdout(
+            '{"type":"diagnostic","@level":"error","@message":"apply boom"}\n'
+        )
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(TerraformChangeError) as exc_info:
+            Terraform(tmp_path).apply(auto_approve=True)
+        assert exc_info.value.exit_code == 1
+        assert "apply boom" in exc_info.value.summary.diagnostics[0]
+
+
+class TestChangeSummaryRender:
+    def test_no_diagnostics(self) -> None:
+        summary = ChangeSummary(to_add=1, to_change=2, to_destroy=3)
+        rendered = summary.render("group_a")
+        assert "group_a" in rendered
+        assert "1 to add" in rendered
+        assert "2 to change" in rendered
+        assert "3 to destroy" in rendered
+
+    def test_resource_changes_rendered_under_summary_line(self) -> None:
+        summary = ChangeSummary(
+            to_add=1,
+            to_change=0,
+            to_destroy=1,
+            resources=(
+                ResourceChange(address="aws_instance.foo", action="create"),
+                ResourceChange(address="aws_instance.bar", action="delete"),
+            ),
+        )
+        rendered = summary.render("group_a")
+        lines = rendered.splitlines()
+        assert lines[0].startswith("group_a: Plan:")
+        assert "aws_instance.foo" in lines[1]
+        assert "+" in lines[1]
+        assert "aws_instance.bar" in lines[2]
+        assert "-" in lines[2]
+
+    def test_with_diagnostics(self) -> None:
+        summary = ChangeSummary(diagnostics=("something went wrong",))
+        rendered = summary.render("group_a")
+        assert "group_a" in rendered
+        assert "something went wrong" in rendered
+
+    def test_multiline_diagnostic_indents_every_line(self) -> None:
+        summary = ChangeSummary(
+            diagnostics=("summary line\ndetail line 1\ndetail line 2",)
+        )
+        rendered = summary.render("group_a")
+        lines = rendered.splitlines()
+        assert lines[3] == "  summary line"
+        assert lines[4] == "  detail line 1"
+        assert lines[5] == "  detail line 2"
+
+    def test_diagnostic_header_ruled_and_contains_rel_path(self) -> None:
+        summary = ChangeSummary(diagnostics=("boom",))
+        rendered = summary.render("group_a")
+        lines = rendered.splitlines()
+        assert lines[0] == lines[2]  # matching rule above and below the header
+        assert "group_a" in lines[1]
 
 
 class TestTerraformOutput:

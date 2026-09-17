@@ -147,3 +147,44 @@ def test_plan_import_vars_resolved_by_default(
     )
     assert result.exit_code == 0
     assert fake_terraform_bin.captured_env["TF_VAR_input_var"] == "chained-value"
+
+
+def test_plan_strategy_parallel_independent_groups_succeeds(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main, args=["--conf-dir", str(fixture_dir), "plan", "--strategy", "parallel"]
+    )
+    assert result.exit_code == 0
+
+
+def test_plan_strategy_parallel_respects_import_dependency_order(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    fake_terraform_bin.set_stdout("chained-value")
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "import_chain"
+    result = runner.invoke(
+        main, args=["--conf-dir", str(fixture_dir), "plan", "--strategy", "parallel"]
+    )
+    assert result.exit_code == 0
+
+
+def test_plan_strategy_parallel_fail_at_end_stops_next_wave(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    fake_terraform_bin.set_exit_code(1)
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main,
+        args=[
+            "--conf-dir",
+            str(fixture_dir),
+            "plan",
+            "--strategy",
+            "parallel",
+            "--fail-at-end",
+        ],
+    )
+    assert result.exit_code == 1

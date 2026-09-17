@@ -19,3 +19,25 @@ def test_fmt_failure_propagates_exit_code(
     fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "simple_resource_group"
     result = runner.invoke(main, args=["--conf-dir", str(fixture_dir), "fmt"])
     assert result.exit_code == 3
+
+
+def test_fmt_strategy_parallel_independent_groups_succeeds(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main, args=["--conf-dir", str(fixture_dir), "fmt", "--strategy", "parallel"]
+    )
+    assert result.exit_code == 0
+
+
+def test_fmt_strategy_parallel_failure_propagates_exit_code(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    fake_terraform_bin.set_exit_code(3)
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main, args=["--conf-dir", str(fixture_dir), "fmt", "--strategy", "parallel"]
+    )
+    assert result.exit_code == 3

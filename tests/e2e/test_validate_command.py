@@ -45,3 +45,27 @@ def test_validate_resource_metadata_missing_triggers_fatal(
     result = runner.invoke(main, args=["--conf-dir", str(fixture_dir), "validate"])
     assert result.exit_code == 1
     assert "discover resources" in result.stderr
+
+
+def test_validate_strategy_parallel_success(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(fixture_dir), "validate", "--strategy", "parallel"],
+    )
+    assert result.exit_code == 0
+
+
+def test_validate_strategy_parallel_failure_exits_1(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform
+) -> None:
+    fake_terraform_bin.set_exit_code(1)
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(fixture_dir), "validate", "--strategy", "parallel"],
+    )
+    assert result.exit_code == 1

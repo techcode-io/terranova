@@ -98,6 +98,40 @@ class InvalidResourcesError(ExplainedError):
     """Represents an invalid resources configuration."""
 
 
+class InteractiveApprovalError(ExplainedError):
+    """Represents a request for interactive approval where it can't be honored."""
+
+    def __init__(self) -> None:
+        """Init interactive approval error."""
+        super().__init__(
+            cause=(
+                "`--strategy parallel` runs multiple `terraform apply` "
+                "processes at once, so none of them can prompt for "
+                "interactive approval."
+            ),
+            resolution=(
+                "Pass `--auto-approve`, or apply a saved plan "
+                "(`terranova plan --out ...` then `terranova apply <file>.tnplan`)."
+            ),
+        )
+
+
+class GraphError(ExplainedError):
+    """Represents an error building a dependency graph between resource groups."""
+
+
+class CyclicImportError(GraphError):
+    """Represents a cyclic dependency between resource groups' `imports`."""
+
+    def __init__(self, rel_paths: list[str]) -> None:
+        """Init cyclic import error."""
+        stuck = ", ".join(sorted(rel_paths))
+        super().__init__(
+            cause=f"A cyclic dependency was detected between: {stuck}",
+            resolution="Check the `imports` section of the involved manifests and remove the cycle.",
+        )
+
+
 class RunbookError(ExplainedError):
     """Represents a runbook error."""
 
