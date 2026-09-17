@@ -18,19 +18,32 @@
 CLI entry point (`terranova.cli:main`, see `pyproject.toml`'s `[project.scripts]`).
 
 Command modules build a plain `click.Command` via `@click.command(...)` and
-don't import `main` themselves - that would make every command module
-depend on this one while this module also depends on all of them, a
-circular dependency. Instead, `main` is defined first, then each command is
-imported and registered explicitly below with `main.add_command(...)`, so
-this module stays the only one that knows about the group.
+don't import `main` themselves, so importing them here doesn't create a
+circular dependency; each one is registered on `main` below with
+`main.add_command(...)`.
 """
 
 from pathlib import Path
 
 import click
 
-from . import __version__
-from .utils import SharedContext
+from terranova import __version__
+from terranova.commands.apply import apply
+from terranova.commands.define import define
+from terranova.commands.destroy import destroy
+from terranova.commands.docs import docs
+from terranova.commands.fmt import fmt
+from terranova.commands.get import get
+from terranova.commands.graph import graph
+from terranova.commands.init import init
+from terranova.commands.ls import ls
+from terranova.commands.output import output
+from terranova.commands.plan import plan
+from terranova.commands.runbook import runbook
+from terranova.commands.taint import taint
+from terranova.commands.untaint import untaint
+from terranova.commands.validate import validate
+from terranova.utils import SharedContext
 
 
 @click.group("terranova")
@@ -56,56 +69,20 @@ def main(debug: bool, verbose: bool, conf_dir: Path) -> None:
     SharedContext.init(debug, verbose, conf_dir)
 
 
-from .commands.apply import apply
-from .commands.define import define
-from .commands.destroy import destroy
-from .commands.docs import docs
-from .commands.fmt import fmt
-from .commands.get import get
-from .commands.graph import graph
-from .commands.init import init
-from .commands.ls import ls
-from .commands.output import output
-from .commands.plan import plan
-from .commands.runbook import runbook
-from .commands.taint import taint
-from .commands.untaint import untaint
-from .commands.validate import validate
+main.add_command(apply)
+main.add_command(define)
+main.add_command(destroy)
+main.add_command(docs)
+main.add_command(fmt)
+main.add_command(get)
+main.add_command(graph)
+main.add_command(init)
+main.add_command(ls)
+main.add_command(output)
+main.add_command(plan)
+main.add_command(runbook)
+main.add_command(taint)
+main.add_command(untaint)
+main.add_command(validate)
 
-for command in (
-    apply,
-    define,
-    destroy,
-    docs,
-    fmt,
-    get,
-    graph,
-    init,
-    ls,
-    output,
-    plan,
-    runbook,
-    taint,
-    untaint,
-    validate,
-):
-    main.add_command(command)
-
-__all__ = [
-    "apply",
-    "define",
-    "destroy",
-    "docs",
-    "fmt",
-    "get",
-    "graph",
-    "init",
-    "ls",
-    "main",
-    "output",
-    "plan",
-    "runbook",
-    "taint",
-    "untaint",
-    "validate",
-]
+__all__ = ["main"]

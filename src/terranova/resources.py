@@ -30,7 +30,7 @@ from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from serde import field, from_dict
 
-from .exceptions import (
+from terranova.exceptions import (
     InvalidManifestError,
     InvalidResourcesError,
     MissingManifestError,
@@ -38,8 +38,8 @@ from .exceptions import (
     UnreadableManifestError,
     VersionManifestError,
 )
-from .process import Command
-from .utils import Constants, SharedContext, serde
+from terranova.process import Command
+from terranova.utils import Constants, SharedContext, serde
 
 
 @serde

@@ -23,7 +23,7 @@ from rich.console import Console
 from serde import disabled, field
 from serde import serde as inner_serde
 
-from .exceptions import ExplainedError
+from terranova.exceptions import ExplainedError
 
 
 @dataclass_transform(field_specifiers=(field,))
