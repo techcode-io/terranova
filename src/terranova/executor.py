@@ -22,16 +22,20 @@ from typing import Literal, Protocol, override
 
 from terranova.graph import Wave, normalize_rel_path
 from terranova.process import ErrorReturnCode
+from terranova.utils import AppContext
 
 
 class ResourceGroupTask(ABC):
     """One resource group's unit of work for an executor. Subclasses implement `run()`."""
 
-    def __init__(self, full_path: Path, rel_path: str, quiet: bool = False) -> None:
+    def __init__(
+        self, ctx: AppContext, full_path: Path, rel_path: str, quiet: bool = False
+    ) -> None:
         """
         Init project task.
 
         Args:
+            ctx: the application context.
             full_path: absolute path to the resource group's directory.
             rel_path: the resource group's path relative to the resources dir.
             quiet: when True, the task should suppress its own per-project
@@ -40,6 +44,7 @@ class ResourceGroupTask(ABC):
                    already shows what's running and per-project chatter would
                    just be noise. Failures should still be reported regardless.
         """
+        self.ctx: AppContext = ctx
         self.full_path: Path = full_path
         self.rel_path: str = rel_path
         self.quiet: bool = quiet

@@ -17,11 +17,13 @@
 import click
 
 from terranova.commands.helpers import extract_output_var
+from terranova.utils import AppContext
 
 
 @click.command("output")
 @click.argument("path", type=str)
 @click.argument("name", type=str)
-def output(path: str, name: str) -> None:
+@click.pass_obj
+def output(ctx: AppContext, path: str, name: str) -> None:
     """Show output values from your root module."""
-    print(extract_output_var(path, name), end="", flush=True)
+    print(extract_output_var(ctx, path, name), end="", flush=True)

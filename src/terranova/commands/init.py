@@ -21,7 +21,7 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import mount_context, read_manifest, resource_dirs
 from terranova.process import ErrorReturnCode
-from terranova.utils import Log, SharedContext
+from terranova.utils import AppContext
 
 
 @click.command("init")
@@ -50,7 +50,9 @@ from terranova.utils import Log, SharedContext
     default=False,
     is_flag=True,
 )
+@click.pass_obj
 def init(
+    ctx: AppContext,
     path: str | None,
     migrate_state: bool,
     no_backend: bool,
@@ -60,17 +62,17 @@ def init(
 ) -> None:
     """Init resources manifest."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
 
     # Store errors if fail_at_end
     errors = False
 
     # Init all paths
     for full_path, rel_path in paths:
-        Log.action(f"Initializing: {rel_path}")
+        ctx.log.action(f"Initializing: {rel_path}")
 
         # Ensure manifest exists and can be read
-        manifest = read_manifest(full_path)
+        manifest = read_manifest(ctx, full_path)
 
         # Remove all symbolic links
         symbolic_links = [file for file in full_path.iterdir() if file.is_symlink()]
@@ -94,9 +96,7 @@ def init(
 
                         os.symlink(
                             os.path.relpath(
-                                SharedContext.shared_dir()
-                                .joinpath(dependency.source)
-                                .as_posix(),
+                                ctx.shared_dir.joinpath(dependency.source).as_posix(),
                                 full_path.joinpath(target_dirname).as_posix(),
                             ),
                             dependency.target,
@@ -119,15 +119,13 @@ def init(
                 ):
                     dir_path.rmdir()
             except OSError:
-                Log.fatal(f"delete the directory at: {dir_path.as_posix()}")
+                ctx.log.fatal(f"delete the directory at: {dir_path.as_posix()}")
 
         try:
             # Mount terraform context
-            terraform = mount_context(full_path, manifest)
+            terraform = mount_context(ctx, full_path, manifest)
             terraform.init(
-                backend_config={
-                    "key": os.path.relpath(full_path, SharedContext.resources_dir())
-                },
+                backend_config={"key": os.path.relpath(full_path, ctx.resources_dir)},
                 migrate_state=migrate_state,
                 no_backend=no_backend,
                 reconfigure=reconfigure,

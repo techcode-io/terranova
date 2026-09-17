@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock
-from typing import ClassVar, Final, NoReturn, cast, dataclass_transform
+from typing import Final, NoReturn, dataclass_transform, override
 
 from click.exceptions import Exit
 from rich.console import Console
@@ -45,107 +46,58 @@ def str_or_none(value: object) -> str | None:
 class Constants:
     """All constants"""
 
-    CTX_CONF_DIR: Final[str] = "ctx_conf_dir"
-    CTX_CONSOLE: Final[str] = "ctx_console"
-    CTX_DEBUG: Final[str] = "ctx_debug"
-    CTX_ERR_CONSOLE: Final[str] = "ctx_err_console"
-    CTX_VERBOSE: Final[str] = "ctx_verbose"
     ENCODING_UTF_8: Final[str] = "utf-8"
     FILE_MODE_READ: Final[str] = "r"
     MANIFEST_FILE_NAME: Final[str] = "manifest.yml"
 
 
-class SharedContext:
-    """Utility class to share context globally."""
+class Log(ABC):
+    """Interface for logging an action/success/failure using a common pattern."""
 
-    # Shard context
-    __UNDERLYING: ClassVar[dict[str, object]] = {}
-    __LOCK: Lock = Lock()
-
-    @staticmethod
-    def init(debug: bool, verbose: bool, conf_dir: Path) -> None:
-        """Init global shared context."""
-        with SharedContext.__LOCK:
-            SharedContext.__UNDERLYING[Constants.CTX_CONSOLE] = Console()
-            SharedContext.__UNDERLYING[Constants.CTX_ERR_CONSOLE] = Console(stderr=True)
-            SharedContext.__UNDERLYING[Constants.CTX_DEBUG] = debug
-            SharedContext.__UNDERLYING[Constants.CTX_VERBOSE] = verbose
-            SharedContext.__UNDERLYING[Constants.CTX_CONF_DIR] = conf_dir
-
-    @staticmethod
-    def console() -> Console:
-        """Retrieve console from context."""
-        with SharedContext.__LOCK:
-            return cast(Console, SharedContext.__UNDERLYING[Constants.CTX_CONSOLE])
-
-    @staticmethod
-    def err_console() -> Console:
-        """Retrieve err console from context."""
-        with SharedContext.__LOCK:
-            return cast(Console, SharedContext.__UNDERLYING[Constants.CTX_ERR_CONSOLE])
-
-    @staticmethod
-    def is_debug_enabled() -> bool:
-        """Returns true if debug is enabled."""
-        with SharedContext.__LOCK:
-            return cast(bool, SharedContext.__UNDERLYING[Constants.CTX_DEBUG])
-
-    @staticmethod
-    def is_verbose_enabled() -> bool:
-        """Returns true if verbose is enabled."""
-        with SharedContext.__LOCK:
-            return cast(bool, SharedContext.__UNDERLYING[Constants.CTX_VERBOSE])
-
-    @staticmethod
-    def conf_dir() -> Path:
-        """Returns conf directory path."""
-        with SharedContext.__LOCK:
-            return cast(Path, SharedContext.__UNDERLYING[Constants.CTX_CONF_DIR])
-
-    @staticmethod
-    def resources_dir() -> Path:
-        """Returns specs directory path."""
-        return SharedContext.conf_dir() / "resources"
-
-    @staticmethod
-    def shared_dir() -> Path:
-        """Returns shared directory path."""
-        return SharedContext.conf_dir() / "shared"
-
-    @staticmethod
-    def terraform_shared_dir() -> Path:
-        """Returns terraform shared directory path."""
-        return SharedContext.conf_dir() / ".terraform"
-
-    @staticmethod
-    def terraform_shared_states_dir() -> Path:
-        """Returns terraform shared states directory path."""
-        return SharedContext.terraform_shared_dir() / "states"
-
-    @staticmethod
-    def terraform_shared_plugin_cache_dir() -> Path:
-        """Returns terraform shared plugin cache directory path."""
-        return SharedContext.terraform_shared_dir() / "plugin-cache"
-
-
-class Log:
-    """Utility class to log message or error using common pattern."""
-
-    @classmethod
-    def action(cls, msg: object) -> None:
+    @abstractmethod
+    def action(self, msg: object) -> None:
         """Log an action."""
-        SharedContext.console().print(f"[yellow]⇒[/yellow] {msg}")
 
-    @classmethod
-    def success(cls, msg: object) -> None:
+    @abstractmethod
+    def success(self, msg: object) -> None:
         """Log a success."""
-        SharedContext.console().print(f"[green]✓[/green] Succeeded to {msg}")
 
-    @classmethod
-    def failure(cls, msgs: str | list[str], err: Exception | None = None) -> None:
+    @abstractmethod
+    def failure(self, msgs: str | list[str], err: Exception | None = None) -> None:
         """Log a failure."""
-        err_console = SharedContext.err_console()
-        if SharedContext.is_debug_enabled() and err:
+
+    def fatal(
+        self, msgs: str | list[str], err: Exception | None = None, raise_exit: int = 1
+    ) -> NoReturn:
+        """Log a failure and exit."""
+        self.failure(msgs, err)
+        raise Exit(code=raise_exit)
+
+
+class ConsoleLog(Log):
+    """`Log` implementation backed by a pair of `rich` consoles."""
+
+    def __init__(self, console: Console, err_console: Console, debug: bool) -> None:
+        """Init console log."""
+        self.__console = console
+        self.__err_console = err_console
+        self.__debug = debug
+
+    @override
+    def action(self, msg: object) -> None:
+        """Log an action."""
+        self.__console.print(f"[yellow]⇒[/yellow] {msg}")
+
+    @override
+    def success(self, msg: object) -> None:
+        """Log a success."""
+        self.__console.print(f"[green]✓[/green] Succeeded to {msg}")
+
+    @override
+    def failure(self, msgs: str | list[str], err: Exception | None = None) -> None:
+        """Log a failure."""
+        err_console = self.__err_console
+        if self.__debug and err:
             err_console.print_exception()
             err_console.print(err)
         if not isinstance(msgs, list):
@@ -163,10 +115,53 @@ class Log:
             else:
                 err_console.print(f"  Details: {err}")
 
-    @classmethod
-    def fatal(
-        cls, msgs: str | list[str], err: Exception | None = None, raise_exit: int = 1
-    ) -> NoReturn:
-        """Log a failure and exit."""
-        Log.failure(msgs, err)
-        raise Exit(code=raise_exit)
+
+@dataclass(frozen=True)
+class AppContext:
+    """Per-invocation application context, attached to the Click context as `ctx.obj`."""
+
+    console: Console
+    err_console: Console
+    debug: bool
+    verbose: bool
+    conf_dir: Path
+    log: Log
+
+    @staticmethod
+    def create(debug: bool, verbose: bool, conf_dir: Path) -> "AppContext":
+        """Build a fresh application context."""
+        console = Console()
+        err_console = Console(stderr=True)
+        return AppContext(
+            console=console,
+            err_console=err_console,
+            debug=debug,
+            verbose=verbose,
+            conf_dir=conf_dir,
+            log=ConsoleLog(console, err_console, debug),
+        )
+
+    @property
+    def resources_dir(self) -> Path:
+        """Returns resources directory path."""
+        return self.conf_dir / "resources"
+
+    @property
+    def shared_dir(self) -> Path:
+        """Returns shared directory path."""
+        return self.conf_dir / "shared"
+
+    @property
+    def terraform_shared_dir(self) -> Path:
+        """Returns terraform shared directory path."""
+        return self.conf_dir / ".terraform"
+
+    @property
+    def terraform_shared_states_dir(self) -> Path:
+        """Returns terraform shared states directory path."""
+        return self.terraform_shared_dir / "states"
+
+    @property
+    def terraform_shared_plugin_cache_dir(self) -> Path:
+        """Returns terraform shared plugin cache directory path."""
+        return self.terraform_shared_dir / "plugin-cache"

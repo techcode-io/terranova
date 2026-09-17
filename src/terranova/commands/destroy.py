@@ -19,22 +19,23 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import mount_context, resource_dirs
 from terranova.process import ErrorReturnCode
-from terranova.utils import Log
+from terranova.utils import AppContext
 
 
 @click.command("destroy")
 @click.argument("path", type=str, required=False)
-def destroy(path: str | None) -> None:
+@click.pass_obj
+def destroy(ctx: AppContext, path: str | None) -> None:
     """Destroy previously-created resources."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
 
     # Format all paths
     for full_path, rel_path in paths:
-        Log.action(f"Destroying resources: {rel_path}")
+        ctx.log.action(f"Destroying resources: {rel_path}")
 
         # Mount terraform context
-        terraform = mount_context(full_path, import_vars=True)
+        terraform = mount_context(ctx, full_path, import_vars=True)
 
         # Execute destroy command
         try:

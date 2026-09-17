@@ -28,7 +28,7 @@ from terranova.commands.helpers import (
     resource_dirs,
 )
 from terranova.executor import ResourceGroupTask
-from terranova.utils import Log
+from terranova.utils import AppContext
 
 
 class _FmtTask(ResourceGroupTask):
@@ -37,8 +37,8 @@ class _FmtTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            Log.action(f"Formatting: {self.rel_path}")
-        terraform = mount_context(self.full_path)
+            self.ctx.log.action(f"Formatting: {self.rel_path}")
+        terraform = mount_context(self.ctx, self.full_path)
         terraform.fmt()
 
 
@@ -46,16 +46,20 @@ class _FmtTask(ResourceGroupTask):
 @click.argument("path", type=str, required=False)
 @flat_strategy_option
 @flat_group_concurrency_option
-def fmt(path: str | None, strategy: str, group_concurrency: int | None) -> None:
+@click.pass_obj
+def fmt(
+    ctx: AppContext, path: str | None, strategy: str, group_concurrency: int | None
+) -> None:
     """Reformat your configuration in the standard style."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
-        _FmtTask(full_path, rel_path, quiet=quiet) for full_path, rel_path in paths
+        _FmtTask(ctx, full_path, rel_path, quiet=quiet) for full_path, rel_path in paths
     ]
 
     results = execute_tasks(
+        ctx,
         strategy,
         tasks,
         fail_at_end=False,

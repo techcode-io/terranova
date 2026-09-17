@@ -30,7 +30,7 @@ from terranova.graph import Wave, build_dependency_graph, compute_waves
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
-from terranova.utils import Constants, Log, SharedContext
+from terranova.utils import AppContext, Constants
 
 flat_strategy_option = click.option(
     "--strategy",
@@ -69,12 +69,13 @@ class SelectorType(click.ParamType[Selector]):
         return Selector(name=data[0], value=None if len(data) == 1 else data[1])
 
 
-def read_manifest(path: Path) -> "ResourcesManifest":
+def read_manifest(ctx: AppContext, path: Path) -> "ResourcesManifest":
     """
     Read the resources manifest if possible.
     This function handle errors by logging and exiting.
 
     Args:
+        ctx: the application context.
         path: path to manifest directory.
 
     Returns:
@@ -83,7 +84,7 @@ def read_manifest(path: Path) -> "ResourcesManifest":
     try:
         return ResourcesManifest.from_file(path / Constants.MANIFEST_FILE_NAME)
     except ManifestError as err:
-        Log.fatal("read manifest", err)
+        ctx.log.fatal("read manifest", err)
 
 
 def parse_execution_plan(text: str) -> dict[str, str]:
@@ -119,13 +120,14 @@ def write_execution_plan(out: Path, execution_plan: dict[str, str]) -> None:
 
 
 def discover_resources(
-    path: Path, selectors: list[Selector] | None = None
+    ctx: AppContext, path: Path, selectors: list[Selector] | None = None
 ) -> list[Resource]:
     """
     Discover resources in every terraform configuration files.
     This function handle errors by logging and exiting.
 
     Args:
+        ctx: the application context.
         path: path to resources directory.
         selectors: list of selectors.
 
@@ -135,13 +137,15 @@ def discover_resources(
     try:
         return ResourcesFinder.find_in_dir(path, selectors)
     except InvalidResourcesError as err:
-        Log.fatal(
+        ctx.log.fatal(
             f"discover resources at `{path.as_posix()}`",
             err,
         )
 
 
-def find_all_resource_dirs(resources_dir: Path) -> list[tuple[Path, str]]:
+def find_all_resource_dirs(
+    ctx: AppContext, resources_dir: Path
+) -> list[tuple[Path, str]]:
     """
     Find all path where there is a resource manifest.
 
@@ -149,7 +153,7 @@ def find_all_resource_dirs(resources_dir: Path) -> list[tuple[Path, str]]:
         list of all path.
     """
     paths: list[tuple[Path, str]] = []
-    resources_dir_path = SharedContext.resources_dir().as_posix()
+    resources_dir_path = ctx.resources_dir.as_posix()
     resources_dir_prefix_len = len(resources_dir_path) + 1
     for path, _, files in os.walk(resources_dir):
         for file in files:
@@ -158,23 +162,25 @@ def find_all_resource_dirs(resources_dir: Path) -> list[tuple[Path, str]]:
     return paths
 
 
-def resource_dirs(path: str | None) -> list[tuple[Path, str]]:
+def resource_dirs(ctx: AppContext, path: str | None) -> list[tuple[Path, str]]:
     """
     List of all resource dirs to interact with.
 
     Args:
+        ctx: the application context.
         path: use a specific path.
 
     Returns:
         list of all resource dirs.
     """
-    resources_dir = SharedContext.resources_dir()
+    resources_dir = ctx.resources_dir
     if path:
         resources_dir = resources_dir.joinpath(path)
-    return find_all_resource_dirs(resources_dir)
+    return find_all_resource_dirs(ctx, resources_dir)
 
 
 def mount_context(
+    ctx: AppContext,
     full_path: Path,
     manifest: ResourcesManifest | None = None,
     import_vars: bool = False,
@@ -182,30 +188,32 @@ def mount_context(
     """Mount the terraform context by importing variables if needed."""
     # Ensure manifest exists and can be read
     if not manifest:
-        manifest = read_manifest(full_path)
+        manifest = read_manifest(ctx, full_path)
 
     # Import variables
-    variables = extract_import_vars(manifest) if import_vars else None
-    return Terraform(full_path, variables)
+    variables = extract_import_vars(ctx, manifest) if import_vars else None
+    return Terraform(ctx, full_path, variables)
 
 
-def extract_import_vars(manifest: ResourcesManifest) -> dict[str, str]:
+def extract_import_vars(ctx: AppContext, manifest: ResourcesManifest) -> dict[str, str]:
     """Extract import variables from manifest."""
     variables: dict[str, str] = {}
     if manifest.imports:
         for importer in manifest.imports:
             target = importer.target if importer.target else importer.resource
-            variables[target] = extract_output_var(importer.source, importer.resource)
+            variables[target] = extract_output_var(
+                ctx, importer.source, importer.resource
+            )
     return variables
 
 
-def extract_output_var(path: str, name: str) -> str:
+def extract_output_var(ctx: AppContext, path: str, name: str) -> str:
     """Show output values from your root module."""
     # Construct resources path
-    full_path = SharedContext.resources_dir().joinpath(path)
+    full_path = ctx.resources_dir.joinpath(path)
 
     # Mount terraform context
-    terraform = mount_context(full_path)
+    terraform = mount_context(ctx, full_path)
 
     # Execute output command
     try:
@@ -215,6 +223,7 @@ def extract_output_var(path: str, name: str) -> str:
 
 
 def execute_tasks(
+    ctx: AppContext,
     strategy: str,
     tasks: list[ResourceGroupTask],
     fail_at_end: bool,
@@ -229,7 +238,7 @@ def execute_tasks(
     and `terranova.executor.ExecutorObserver`.
     """
     if strategy == "parallel":
-        ui = ParallelProgress(total=len(tasks))
+        ui = ParallelProgress(ctx, total=len(tasks))
         executor = create_executor(
             "parallel", max_workers=group_concurrency, observer=ui
         )
@@ -251,6 +260,7 @@ def flat_wave(paths: list[tuple[Path, str]]) -> list[Wave]:
 
 
 def read_manifests_and_waves(
+    ctx: AppContext,
     paths: list[tuple[Path, str]],
 ) -> tuple[dict[str, ResourcesManifest], list[Wave]]:
     """
@@ -260,7 +270,9 @@ def read_manifests_and_waves(
     (via `mount_context(..., import_vars=True)`) and therefore need dependency
     ordering; see `flat_wave` for commands that don't.
     """
-    manifests = {rel_path: read_manifest(full_path) for full_path, rel_path in paths}
+    manifests = {
+        rel_path: read_manifest(ctx, full_path) for full_path, rel_path in paths
+    }
     graph = build_dependency_graph(paths, manifests)
     waves = compute_waves(graph)
     return manifests, waves

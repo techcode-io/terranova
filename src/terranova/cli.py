@@ -43,7 +43,7 @@ from terranova.commands.runbook import runbook
 from terranova.commands.taint import taint
 from terranova.commands.untaint import untaint
 from terranova.commands.validate import validate
-from terranova.utils import SharedContext
+from terranova.utils import AppContext
 
 
 @click.group("terranova")
@@ -64,9 +64,10 @@ from terranova.utils import SharedContext
     default="./conf",
 )
 @click.version_option(__version__)
-def main(debug: bool, verbose: bool, conf_dir: Path) -> None:
+@click.pass_context
+def main(ctx: click.Context, debug: bool, verbose: bool, conf_dir: Path) -> None:
     """Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale."""
-    SharedContext.init(debug, verbose, conf_dir)
+    ctx.obj = AppContext.create(debug, verbose, conf_dir)
 
 
 main.add_command(apply)

@@ -8,11 +8,14 @@ from typing import override
 
 from terranova.executor import ParallelExecutor, ResourceGroupTask, SequentialExecutor
 from terranova.process import ErrorReturnCode
+from terranova.utils import AppContext
+
+_CTX = AppContext.create(debug=False, verbose=False, conf_dir=Path("."))
 
 
 class _FakeTask(ResourceGroupTask):
     def __init__(self, rel_path: str, action: Callable[[], None]) -> None:
-        super().__init__(full_path=Path(rel_path), rel_path=rel_path)
+        super().__init__(_CTX, full_path=Path(rel_path), rel_path=rel_path)
         self._action: Callable[[], None] = action
 
     @override

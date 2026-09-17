@@ -32,7 +32,7 @@ from terranova.commands.helpers import (
 )
 from terranova.executor import ResourceGroupResult, ResourceGroupTask
 from terranova.resources import ResourcesManifest
-from terranova.utils import Constants, Log
+from terranova.utils import AppContext, Constants
 
 
 class _PlanTask(ResourceGroupTask):
@@ -40,6 +40,7 @@ class _PlanTask(ResourceGroupTask):
 
     def __init__(
         self,
+        ctx: AppContext,
         full_path: Path,
         rel_path: str,
         manifest: ResourcesManifest | None,
@@ -53,7 +54,7 @@ class _PlanTask(ResourceGroupTask):
         quiet: bool = False,
     ) -> None:
         """Init plan task."""
-        super().__init__(full_path, rel_path, quiet=quiet)
+        super().__init__(ctx, full_path, rel_path, quiet=quiet)
         self._manifest: ResourcesManifest | None = manifest
         self._input: bool = input
         self._no_color: bool = no_color
@@ -65,11 +66,11 @@ class _PlanTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            Log.action(f"Generating plan: {self.rel_path}")
+            self.ctx.log.action(f"Generating plan: {self.rel_path}")
 
         # Mount terraform context
         terraform = mount_context(
-            self.full_path, manifest=self._manifest, import_vars=True
+            self.ctx, self.full_path, manifest=self._manifest, import_vars=True
         )
 
         if self._out:
@@ -162,7 +163,9 @@ class _PlanTask(ResourceGroupTask):
     type=int,
     default=None,
 )
+@click.pass_obj
 def plan(
+    ctx: AppContext,
     path: str | None,
     input: bool,
     no_color: bool,
@@ -175,16 +178,17 @@ def plan(
 ) -> None:
     """Show changes required by the current configuration."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
 
     # Execution plan
     execution_plan: dict[str, str] = {}
 
     # Read every manifest once, reused for mounting and for the dependency graph
-    manifests, waves = read_manifests_and_waves(paths)
+    manifests, waves = read_manifests_and_waves(ctx, paths)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
         _PlanTask(
+            ctx,
             full_path,
             rel_path,
             manifests[rel_path],
@@ -199,13 +203,13 @@ def plan(
         for full_path, rel_path in paths
     ]
 
-    results = execute_tasks(strategy, tasks, fail_at_end, waves, group_concurrency)
+    results = execute_tasks(ctx, strategy, tasks, fail_at_end, waves, group_concurrency)
 
     def save_plan_to_file():
         if not out:
             return
         write_execution_plan(out, execution_plan)
-        Log.action(
+        ctx.log.action(
             f"Saved terranova plan to: {out}\n\n"
             + "To perform exactly these actions with terranova, run the following command to apply:\n"
             + f'    terranova apply "{out}"'

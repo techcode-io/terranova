@@ -24,37 +24,38 @@ from terranova.exceptions import (
     MissingRunbookError,
 )
 from terranova.process import ErrorReturnCode
-from terranova.utils import Log, SharedContext
+from terranova.utils import AppContext
 
 
 @click.command("runbook")
 @click.argument("path", type=str)
 @click.argument("name", type=str)
-def runbook(path: str, name: str) -> None:
+@click.pass_obj
+def runbook(ctx: AppContext, path: str, name: str) -> None:
     """Execute a runbook."""
     # Construct resources path
-    full_path = SharedContext.resources_dir().joinpath(path)
+    full_path = ctx.resources_dir.joinpath(path)
 
     # Ensure manifest exists and can be read
-    manifest = read_manifest(full_path)
+    manifest = read_manifest(ctx, full_path)
 
     # Extract runbook
     matching_runbooks = (
         [rb for rb in manifest.runbooks if rb.name == name] if manifest.runbooks else []
     )
     if not matching_runbooks:
-        Log.fatal("execute runbook", MissingRunbookError(name))
+        ctx.log.fatal("execute runbook", MissingRunbookError(name))
     if len(matching_runbooks) > 1:
-        Log.fatal("execute runbook", AmbiguousRunbookError(name))
+        ctx.log.fatal("execute runbook", AmbiguousRunbookError(name))
 
     # Import vars
-    import_vars = extract_import_vars(manifest)
+    import_vars = extract_import_vars(ctx, manifest)
 
     # Execute runbook
     executable_runbook = next(iter(matching_runbooks))
     try:
-        executable_runbook.exec(path, full_path / "runbooks", import_vars)
+        executable_runbook.exec(ctx, path, full_path / "runbooks", import_vars)
     except MissingRunbookEnvError as err:
-        Log.fatal("find environment variable", err)
+        ctx.log.fatal("find environment variable", err)
     except ErrorReturnCode as err:
         raise Exit(code=err.exit_code) from err

@@ -25,7 +25,7 @@ import mdformat
 from jinja2 import Environment, PackageLoader
 
 from terranova.commands.helpers import discover_resources, read_manifest
-from terranova.utils import Constants, SharedContext
+from terranova.utils import AppContext, Constants
 
 
 def format_markdown(text: str) -> str:
@@ -42,20 +42,19 @@ def format_markdown(text: str) -> str:
     required=True,
     default="./docs",
 )
-def docs(docs_dir: Path) -> None:
+@click.pass_obj
+def docs(ctx: AppContext, docs_dir: Path) -> None:
     """Generate documentation for all resources."""
     # Find all resources manifests
     jobs: list[tuple[Path, Path]] = []
-    for path, _, files in os.walk(SharedContext.resources_dir().as_posix()):
+    for path, _, files in os.walk(ctx.resources_dir.as_posix()):
         for file in files:
             if os.path.basename(file) == Constants.MANIFEST_FILE_NAME:
                 jobs.append(
                     (
                         Path(path),
                         docs_dir.joinpath(
-                            os.path.relpath(
-                                path, SharedContext.resources_dir().as_posix()
-                            )
+                            os.path.relpath(path, ctx.resources_dir.as_posix())
                         ),
                     )
                 )
@@ -71,8 +70,8 @@ def docs(docs_dir: Path) -> None:
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Read resources manifest and find all resources
-        manifest = read_manifest(resources_path)
-        resources = discover_resources(resources_path)
+        manifest = read_manifest(ctx, resources_path)
+        resources = discover_resources(ctx, resources_path)
 
         # Write documentation file
         rendering = tmpl.render({"manifest": manifest, "resources": resources})

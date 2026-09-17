@@ -30,7 +30,7 @@ from terranova.commands.helpers import (
 from terranova.exceptions import InvalidResourcesError
 from terranova.executor import ResourceGroupTask
 from terranova.process import ErrorReturnCode
-from terranova.utils import Log
+from terranova.utils import AppContext
 
 
 class _ValidateTask(ResourceGroupTask):
@@ -39,26 +39,26 @@ class _ValidateTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            Log.action(f"Validating: {self.rel_path}")
+            self.ctx.log.action(f"Validating: {self.rel_path}")
 
         # Mount terraform context
-        terraform = mount_context(self.full_path)
-        discover_resources(self.full_path)
+        terraform = mount_context(self.ctx, self.full_path)
+        discover_resources(self.ctx, self.full_path)
 
         message = f"validate resources at `{self.full_path.as_posix()}`."
 
         try:
             result = terraform.validate()
         except InvalidResourcesError as err:
-            Log.failure(message, err)
+            self.ctx.log.failure(message, err)
             raise ErrorReturnCode(cmd=f"validate {self.rel_path}", exit_code=1) from err
 
         if result.valid:
             if not self.quiet:
-                Log.success(message)
+                self.ctx.log.success(message)
             return
 
-        Log.failure(
+        self.ctx.log.failure(
             [message, *(f"{d.severity}: {d.summary}" for d in result.diagnostics)]
         )
         raise ErrorReturnCode(cmd=f"validate {self.rel_path}", exit_code=1)
@@ -74,7 +74,9 @@ class _ValidateTask(ResourceGroupTask):
 )
 @flat_strategy_option
 @flat_group_concurrency_option
+@click.pass_obj
 def validate(
+    ctx: AppContext,
     path: str | None,
     fail_at_end: bool,
     strategy: str,
@@ -82,13 +84,15 @@ def validate(
 ) -> None:
     """Check whether the configuration is valid."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
-        _ValidateTask(full_path, rel_path, quiet=quiet) for full_path, rel_path in paths
+        _ValidateTask(ctx, full_path, rel_path, quiet=quiet)
+        for full_path, rel_path in paths
     ]
 
     results = execute_tasks(
+        ctx,
         strategy,
         tasks,
         fail_at_end,
@@ -98,6 +102,6 @@ def validate(
 
     # Report any errors if fail_at_end has been enabled
     if any(r.status == "failed" for r in results):
-        Log.fatal(
+        ctx.log.fatal(
             "The syntax is probably incorrect in one of the projects. See above for errors."
         )

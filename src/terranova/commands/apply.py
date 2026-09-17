@@ -32,7 +32,7 @@ from terranova.commands.helpers import (
 from terranova.exceptions import InteractiveApprovalError
 from terranova.executor import ResourceGroupTask
 from terranova.resources import ResourcesManifest
-from terranova.utils import Constants, Log, SharedContext
+from terranova.utils import AppContext, Constants
 
 
 class _ApplyTask(ResourceGroupTask):
@@ -40,6 +40,7 @@ class _ApplyTask(ResourceGroupTask):
 
     def __init__(
         self,
+        ctx: AppContext,
         full_path: Path,
         rel_path: str,
         manifest: ResourcesManifest | None,
@@ -50,7 +51,7 @@ class _ApplyTask(ResourceGroupTask):
         quiet: bool = False,
     ) -> None:
         """Init apply task."""
-        super().__init__(full_path, rel_path, quiet=quiet)
+        super().__init__(ctx, full_path, rel_path, quiet=quiet)
         self._manifest: ResourcesManifest | None = manifest
         self._auto_approve: bool = auto_approve
         self._target: str = target
@@ -59,11 +60,11 @@ class _ApplyTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            Log.action(f"Applying plan: {self.rel_path}")
+            self.ctx.log.action(f"Applying plan: {self.rel_path}")
 
         # Mount terraform context
         terraform = mount_context(
-            self.full_path, manifest=self._manifest, import_vars=True
+            self.ctx, self.full_path, manifest=self._manifest, import_vars=True
         )
 
         if self._execution_plan:
@@ -117,7 +118,9 @@ class _ApplyTask(ResourceGroupTask):
     type=int,
     default=None,
 )
+@click.pass_obj
 def apply(
+    ctx: AppContext,
     path_or_plan: str | None,
     auto_approve: bool,
     target: str,
@@ -134,28 +137,29 @@ def apply(
             Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)
         )
         paths = [
-            (SharedContext.resources_dir().joinpath(rel_path), rel_path)
+            (ctx.resources_dir.joinpath(rel_path), rel_path)
             for rel_path in execution_plan
         ]
     else:
         execution_plan = None
 
         # Find all resources manifests
-        paths = resource_dirs(path_or_plan)
+        paths = resource_dirs(ctx, path_or_plan)
 
     # Running several `terraform apply` processes at once means none of them
     # can fall back to an interactive approval prompt - fail fast instead of
     # letting every task hit terraform's own cryptic error.
     if strategy == "parallel" and not auto_approve and execution_plan is None:
-        Log.fatal("apply resources in parallel", InteractiveApprovalError())
+        ctx.log.fatal("apply resources in parallel", InteractiveApprovalError())
 
     # Read every manifest once, reused for mounting and for the dependency graph.
     # Manifests are read from disk by rel_path regardless of whether `paths` came
     # from resource_dirs() or a saved .tnplan file's own keys.
-    manifests, waves = read_manifests_and_waves(paths)
+    manifests, waves = read_manifests_and_waves(ctx, paths)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
         _ApplyTask(
+            ctx,
             full_path,
             rel_path,
             manifests[rel_path],
@@ -167,7 +171,7 @@ def apply(
         for full_path, rel_path in paths
     ]
 
-    results = execute_tasks(strategy, tasks, fail_at_end, waves, group_concurrency)
+    results = execute_tasks(ctx, strategy, tasks, fail_at_end, waves, group_concurrency)
 
     # Report any errors if fail_at_end has been enabled
     if any(r.status == "failed" for r in results):

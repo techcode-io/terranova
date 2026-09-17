@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from terranova.utils import SharedContext
+from terranova.utils import AppContext
 
 _FAKE_TERRAFORM_SCRIPT = """#!/usr/bin/env python3
 import base64
@@ -64,11 +64,9 @@ sys.exit(exit_code)
 """
 
 
-@pytest.fixture(autouse=True)
-def _reset_shared_context(  # pyright: ignore[reportUnusedFunction]
-    tmp_path: Path,
-) -> None:
-    SharedContext.init(debug=False, verbose=False, conf_dir=tmp_path)
+@pytest.fixture
+def app_context(tmp_path: Path) -> AppContext:
+    return AppContext.create(debug=False, verbose=False, conf_dir=tmp_path)
 
 
 class FakeTerraform:

@@ -8,7 +8,7 @@ import pytest
 from terranova.exceptions import CyclicImportError
 from terranova.graph import DependencyGraph, build_dependency_graph, compute_waves
 from terranova.resources import ResourcesManifest
-from terranova.utils import SharedContext
+from terranova.utils import AppContext
 
 _MANIFEST_NO_IMPORTS: Final[str] = """
 version: "1.0"
@@ -76,13 +76,12 @@ class TestComputeWaves:
 
 
 class TestBuildDependencyGraph:
-    def test_no_imports_all_independent(self, tmp_path: Path) -> None:
-        SharedContext.init(debug=False, verbose=False, conf_dir=tmp_path)
+    def test_no_imports_all_independent(self, app_context: AppContext) -> None:
         dir_a, rel_a = _write_manifest_dir(
-            SharedContext.resources_dir(), "group_a", _MANIFEST_NO_IMPORTS
+            app_context.resources_dir, "group_a", _MANIFEST_NO_IMPORTS
         )
         dir_b, rel_b = _write_manifest_dir(
-            SharedContext.resources_dir(), "group_b", _MANIFEST_NO_IMPORTS
+            app_context.resources_dir, "group_b", _MANIFEST_NO_IMPORTS
         )
         paths = [(dir_a, rel_a), (dir_b, rel_b)]
         manifests = {
@@ -94,13 +93,12 @@ class TestBuildDependencyGraph:
         assert graph.depends_on == {"group_a": set(), "group_b": set()}
         assert compute_waves(graph) == [["group_a", "group_b"]]
 
-    def test_chain_of_imports_produces_edges(self, tmp_path: Path) -> None:
-        SharedContext.init(debug=False, verbose=False, conf_dir=tmp_path)
+    def test_chain_of_imports_produces_edges(self, app_context: AppContext) -> None:
         dir_producer, rel_producer = _write_manifest_dir(
-            SharedContext.resources_dir(), "producer", _MANIFEST_NO_IMPORTS
+            app_context.resources_dir, "producer", _MANIFEST_NO_IMPORTS
         )
         dir_consumer, rel_consumer = _write_manifest_dir(
-            SharedContext.resources_dir(),
+            app_context.resources_dir,
             "consumer",
             _manifest_with_imports("producer"),
         )
@@ -115,7 +113,7 @@ class TestBuildDependencyGraph:
         assert compute_waves(graph) == [["producer"], ["consumer"]]
 
     def test_import_from_out_of_scope_source_creates_no_edge(
-        self, tmp_path: Path
+        self, app_context: AppContext
     ) -> None:
         """
         An import source that isn't part of the current `paths` (e.g. the
@@ -123,9 +121,8 @@ class TestBuildDependencyGraph:
         earlier separate run) is treated as an already-satisfied external
         dependency, not an error - there's nothing to order it against here.
         """
-        SharedContext.init(debug=False, verbose=False, conf_dir=tmp_path)
         dir_consumer, rel_consumer = _write_manifest_dir(
-            SharedContext.resources_dir(),
+            app_context.resources_dir,
             "consumer",
             _manifest_with_imports("does_not_exist"),
         )

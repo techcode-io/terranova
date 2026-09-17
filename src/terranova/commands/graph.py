@@ -26,18 +26,19 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import mount_context
 from terranova.process import ErrorReturnCode
-from terranova.utils import SharedContext
+from terranova.utils import AppContext
 
 
 @click.command("graph")
 @click.argument("path", type=str)
-def graph(path: str) -> None:
+@click.pass_obj
+def graph(ctx: AppContext, path: str) -> None:
     """Generate a Graphviz graph of the steps in an operation."""
     # Construct resources path
-    full_path = SharedContext.resources_dir().joinpath(path)
+    full_path = ctx.resources_dir.joinpath(path)
 
     # Mount terraform context
-    terraform = mount_context(full_path)
+    terraform = mount_context(ctx, full_path)
 
     # Execute destroy command
     try:

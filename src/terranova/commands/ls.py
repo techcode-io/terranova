@@ -17,14 +17,16 @@
 import click
 
 from terranova.commands.helpers import resource_dirs
+from terranova.utils import AppContext
 
 
 @click.command("ls")
 @click.argument("path", type=str, required=False)
-def ls(path: str | None) -> None:
+@click.pass_obj
+def ls(ctx: AppContext, path: str | None) -> None:
     """List resources."""
     # Find all resources manifests
-    paths = resource_dirs(path)
+    paths = resource_dirs(ctx, path)
 
     # Display resource paths
     for full_path, _ in paths:

@@ -22,20 +22,21 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import mount_context
 from terranova.process import ErrorReturnCode
-from terranova.utils import SharedContext
+from terranova.utils import AppContext
 
 
 @click.command("import")
 @click.argument("path", type=str)
 @click.argument("address", type=str)
 @click.argument("identifier", type=str)
-def define(path: str, address: str, identifier: str) -> None:
+@click.pass_obj
+def define(ctx: AppContext, path: str, address: str, identifier: str) -> None:
     """Associate existing infrastructure with a Terraform resource."""
     # Construct resources path
-    full_path = SharedContext.resources_dir().joinpath(path)
+    full_path = ctx.resources_dir.joinpath(path)
 
     # Mount terraform context
-    terraform = mount_context(full_path, import_vars=True)
+    terraform = mount_context(ctx, full_path, import_vars=True)
 
     # Execute import command
     try:

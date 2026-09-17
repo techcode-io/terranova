@@ -23,7 +23,7 @@ from typing import Final, cast, override
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
 from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
-from terranova.utils import Log, SharedContext, int_or_default, str_or_none
+from terranova.utils import AppContext, int_or_default, str_or_none
 
 _DIAGNOSTIC_RULE: Final[str] = "─" * 60
 _MAX_FALLBACK_DIAGNOSTIC_LENGTH: Final[int] = 4000
@@ -292,22 +292,26 @@ class TerraformChangeError(ErrorReturnCode):
 class Terraform(Bind):
     """Represents a bind to terraform command."""
 
-    def __init__(self, work_dir: Path, variables: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        ctx: AppContext,
+        work_dir: Path,
+        variables: dict[str, str] | None = None,
+    ) -> None:
         """Init terraform bind."""
+        self.__ctx = ctx
         self.__work_dir = work_dir
         self.__variables = variables
 
         try:
             super().__init__("terraform")
         except CommandNotFound as err:
-            Log.fatal("detect terraform binary", err)
+            ctx.log.fatal("detect terraform binary", err)
 
         try:
-            SharedContext.terraform_shared_plugin_cache_dir().mkdir(
-                parents=True, exist_ok=True
-            )
+            ctx.terraform_shared_plugin_cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as err:
-            Log.fatal("create terraform cache directory", err)
+            ctx.log.fatal("create terraform cache directory", err)
 
     @override
     def create(self, cmd_path: str | Path) -> Command:
@@ -342,11 +346,11 @@ class Terraform(Bind):
 
         # Bind plugin cache dir
         additional_env_vars["TF_PLUGIN_CACHE_DIR"] = (
-            SharedContext.terraform_shared_plugin_cache_dir().absolute().as_posix()
+            self.__ctx.terraform_shared_plugin_cache_dir.absolute().as_posix()
         )
 
         # Enable debug
-        if SharedContext.is_verbose_enabled():
+        if self.__ctx.verbose:
             additional_env_vars["TF_LOG"] = "DEBUG"
 
         return (
@@ -420,7 +424,7 @@ class Terraform(Bind):
         suppresses the noise of a routine, successful run.
         """
         if not quiet or summary.has_errors:
-            SharedContext.console().print(summary.render(rel_path))
+            self.__ctx.console.print(summary.render(rel_path))
 
     def plan(
         self,
