@@ -37,6 +37,7 @@
 - Ability to auto-generate documentation using metadata attached to resource definition.
 - Ability to execute runbooks to interact with resources.
 - Ability to import variables between resource group.
+- Ability to run commands across resource groups in parallel, honoring dependency order.
 
 ## :dart: Motivation
 
@@ -229,6 +230,34 @@ imports:
     import: "<output_variable>" # Name of the output variable to import
     as: "<working_directory>" # Optional: Name of the input variable to map to.
 ```
+
+### How to run commands across resource groups in parallel.
+
+- By default, `terranova` runs with `--strategy sequential`: one resource group after another.
+- `plan`, `apply`, `fmt` and `validate` also accept `--strategy parallel` to run independent resource
+  groups concurrently instead.
+- Use `--group-concurrency <n>` to cap how many resource groups run at once under `--strategy parallel`
+  (defaults to a sane pool size if unset). This is distinct from `--parallelism`, which limits terraform's
+  own resource-level concurrency inside a single invocation.
+- Use `--fail-at-end` to let unaffected resource groups keep running after a failure instead of stopping
+  the whole run immediately.
+
+```bash
+terranova plan --strategy parallel --group-concurrency 4
+terranova apply --strategy parallel --auto-approve --fail-at-end
+```
+
+- For `plan` and `apply`, execution order still honors dependencies declared through manifest
+  [`imports`](#how-to-import-variables-across-resource-groups): resource groups are grouped into
+  topological "waves", where every group in a wave has all its dependencies satisfied by earlier waves.
+  `--strategy parallel` runs a wave's groups concurrently and waits for the whole wave to finish before
+  starting the next one; `--strategy sequential` runs the same waves flattened, one group at a time.
+  A cyclic `imports` chain is rejected with an error before anything runs.
+- `fmt` and `validate` don't resolve `imports`, so there's no dependency ordering to respect: every
+  discovered resource group is treated as a single wave and is safe to run concurrently with every other.
+- `apply --strategy parallel` requires `--auto-approve` (or applying a saved `.tnplan` file): running
+  several `terraform apply` processes at once means none of them can fall back to an interactive
+  approval prompt.
 
 ### How to regenerate the documentation.
 
