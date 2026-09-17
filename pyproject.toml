@@ -60,7 +60,7 @@ reportUnusedCallResult = false
 
 [tool.poe.tasks."env:configure"]
 help = "Setup project environment."
-script = "scripts.tasks.env:configure"
+cmd = "pre-commit install"
 
 [tool.poe.tasks."project:upgrade"]
 help = "Upgrade project dependencies."
