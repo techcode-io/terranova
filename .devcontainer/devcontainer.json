@@ -1,0 +1,67 @@
+{
+  "name": "terranova",
+  "build": {
+    "dockerfile": "Containerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  // `poe claude:sandbox` sets CONTAINER_WORKSPACE: the workspace's own absolute path on
+  // macOS/Linux hosts, so the IDE integration's file paths (host paths) resolve inside the
+  // container, and /workspaces/<name> on Windows, where a host path isn't a valid Linux path.
+  // Launched any other way (VS Code...) it falls back to /workspace.
+  "workspaceFolder": "${localEnv:CONTAINER_WORKSPACE:/workspace}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localEnv:CONTAINER_WORKSPACE:/workspace},type=bind,consistency=delegated",
+  "remoteUser": "vscode",
+  // Required so init-sandbox.sh (run as root) can (re)apply the egress-restricting iptables/ipset
+  // rules on every container start. The vscode user can't use them directly: it has no general
+  // sudo, only the right to run that one baked-in script (see the Containerfile).
+  "capAdd": ["NET_ADMIN", "NET_RAW"],
+  // The egress allowlist is IPv4-only, so IPv6 is turned off rather than left as a way around it.
+  "runArgs": [
+    "--sysctl=net.ipv6.conf.all.disable_ipv6=1",
+    "--sysctl=net.ipv6.conf.default.disable_ipv6=1"
+  ],
+  "mounts": [
+    // Persist Claude Code auth/config, the uv package cache, and shell history across rebuilds.
+    "source=terranova-claude-config,target=/home/vscode/.claude,type=volume",
+    "source=terranova-uv-cache,target=/home/vscode/.cache/uv,type=volume",
+    "source=terranova-bashhistory,target=/commandhistory,type=volume",
+    // The workspace is writable by the agent, but these paths are executed on the host outside
+    // any sandbox (initializeCommand, git hooks/config, Claude Code project settings and hooks),
+    // so a compromised session must not be able to plant code in them. Read-only overlays.
+    "source=${localWorkspaceFolder}/.devcontainer,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.devcontainer,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.claude,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.claude,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.git/hooks,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.git/hooks,type=bind,readonly",
+    "source=${localWorkspaceFolder}/.git/config,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.git/config,type=bind,readonly"
+  ],
+  "remoteEnv": {
+    "UV_CACHE_DIR": "/home/vscode/.cache/uv",
+    // The workspace is shared with the host, so the container's Linux venv must not land in the
+    // project's .venv and clobber the host's one.
+    "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv",
+    "HISTFILE": "/commandhistory/.bash_history",
+    // Error reporting would need sentry.io, which accepts anonymous writes and so is left off
+    // the firewall allowlist.
+    "DISABLE_ERROR_REPORTING": "1"
+  },
+  // Runs on the host (through uv, which the project already requires, so it works the same on
+  // macOS, Linux and Windows without depending on a `python3` binary), before the container exists, to extract the plugins enabled in the
+  // host's Claude Code config so post_create.py can carry them into the sandbox's otherwise
+  // isolated ~/.claude volume.
+  "initializeCommand": "uv run --no-project .devcontainer/initialize.py",
+  "postCreateCommand": "uv run --no-project .devcontainer/post_create.py",
+  // Re-applied on every start; the script comes from the image, not the (agent-writable) workspace.
+  "postStartCommand": "sudo /usr/local/bin/init-sandbox.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "hashicorp.terraform"
+      ]
+    }
+  }
+}

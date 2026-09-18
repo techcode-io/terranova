@@ -16,3 +16,4 @@ last-cli-checks
 reports
 pyrightconfig.json
 .zed
+.devcontainer/.generated

@@ -18,6 +18,7 @@ repos:
     hooks:
       - id: check-json
         name: check-json-schema
+        exclude: ^\.devcontainer/devcontainer\.json$
       - id: mixed-line-ending
         name: enforce-lf-newline
         args:

@@ -1,0 +1,40 @@
+FROM mcr.microsoft.com/devcontainers/base:ubuntu
+
+# Node, GitHub CLI, and the Claude Code CLI come from devcontainer features (see
+# devcontainer.json). Everything else the sandbox needs is baked in here, root-owned, so that
+# nothing the agent can write to (the workspace, its home) is ever executed as root or trusted.
+RUN \
+  apt-get update && apt-get install -y --no-install-recommends \
+    iptables \
+    ipset \
+    dnsutils \
+    socat \
+    jq \
+  && rm -rf /var/lib/apt/lists/*
+
+# uv is installed system-wide (root-owned) rather than into the vscode user's home at
+# post-create time. It manages the pinned Python interpreter itself.
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+
+# oh-my-posh renders Claude Code's status line (see post_create.py). Pinned to the version used on
+# the host, installed root-owned like the other tools.
+ARG OH_MY_POSH_VERSION=31.3.0
+RUN \
+  arch="$(dpkg --print-architecture)" \
+  && curl -fsSL -o /usr/local/bin/oh-my-posh \
+    "https://github.com/JanDeDobbeleer/oh-my-posh/releases/download/v${OH_MY_POSH_VERSION}/posh-linux-${arch}" \
+  && chmod 755 /usr/local/bin/oh-my-posh
+
+# Drop the base image's blanket passwordless sudo: with NET_ADMIN it would let the agent simply
+# `sudo iptables -F` its way out of the egress firewall. The only thing vscode may run as root is
+# the startup script below (no arguments allowed), which lives in the image where vscode can't
+# modify it. It re-verifies on every start that no other sudo rule slipped in (e.g. from a feature).
+RUN rm -f /etc/sudoers.d/vscode; gpasswd -d vscode sudo || true
+
+COPY init-sandbox.sh /usr/local/bin/init-sandbox.sh
+RUN \
+  chown root:root /usr/local/bin/init-sandbox.sh \
+  && chmod 755 /usr/local/bin/init-sandbox.sh \
+  && echo 'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-sandbox.sh ""' \
+    > /etc/sudoers.d/terranova-sandbox \
+  && chmod 440 /etc/sudoers.d/terranova-sandbox

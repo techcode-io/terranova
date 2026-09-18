@@ -1,0 +1,6 @@
+# Files that run inside the Linux sandbox container must keep LF endings on every host: a Windows
+# checkout with core.autocrlf would otherwise turn `#!/bin/bash` into `#!/bin/bash\r` and break them.
+.devcontainer/*.sh text eol=lf
+.devcontainer/*.py text eol=lf
+.devcontainer/Containerfile text eol=lf
+.devcontainer/*.json text eol=lf

@@ -125,6 +125,10 @@ help = "Build rpm packages."
 case = "linux"
 script = "scripts.tasks.package:rpm"
 
+[tool.poe.tasks."claude:sandbox"]
+help = "Launch Claude Code inside the .devcontainer sandbox, via podman or docker."
+script = "scripts.tasks.sandbox:claude"
+
 [tool.poe.tasks."test"]
 help = "Run all tests."
 cmd = "pytest --junitxml=reports/junit-report.xml -n=auto --timeout=900 --dist=loadgroup tests"
