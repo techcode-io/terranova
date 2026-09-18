@@ -12,6 +12,8 @@ IFS=$'\n\t'
 # first use - along with any parent directories podman has to create to reach the mount point
 # (e.g. ~/.cache itself, not just ~/.cache/uv).
 chown -R vscode:vscode /home/vscode/.cache /commandhistory
+# Same for the venv volume mounted at <workspace>/.venv (the path isn't fixed, so find it).
+awk '$5 ~ /\/\.venv$/ {print $5}' /proc/self/mountinfo | xargs -r chown vscode:vscode
 # ~/.claude/projects/<key> is a bind mount of the host's project directory (memory/ on top of it
 # is read-only), so recursing into it would fail and chown host files. Only the projects/ directory
 # itself, which podman creates root-owned to reach the mount point, is fixed.
@@ -106,6 +108,17 @@ if [ -z "$(ipset list allowed-domains | sed -n '/^Members:/,$p' | tail -n +2)" ]
   exit 1
 fi
 iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
+
+# GitHub's DNS rotates across a large pool, so the single lookup above misses IPs that git (e.g.
+# pre-commit cloning hook repos) later resolves to. Allow its published IPv4 ranges as well.
+echo "Fetching GitHub IP ranges..."
+if ranges="$(curl -fsS --max-time 10 https://api.github.com/meta | jq -r '(.web + .api + .git)[] | select(test("^[0-9.]+/[0-9]+$"))')" && [ -n "$ranges" ]; then
+  while read -r cidr; do
+    ipset add allowed-domains "$cidr" -exist
+  done <<< "$ranges"
+else
+  echo "WARNING: failed to fetch GitHub IP ranges, relying on resolved IPs only" >&2
+fi
 
 # Refuse everything else outright instead of silently dropping it: a blocked connection then
 # fails immediately with "connection refused" rather than hanging until it times out (which is

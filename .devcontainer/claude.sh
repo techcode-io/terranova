@@ -27,13 +27,10 @@ export CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1
 # renderer for good on this machine.
 export CLAUDE_CODE_NO_FLICKER=1
 
-# Leave mouse selection to the terminal. In fullscreen mode Claude Code captures the mouse and does
-# the copy itself: with a native tool (pbcopy, wl-copy, xclip, xsel - none exist in this container)
-# or, only over SSH, with OSC 52. Neither works here, so copying by mouse silently fails. With the
-# capture off, dragging selects natively and Cmd+C copies; PgUp/PgDn/Ctrl+Home/Ctrl+End still scroll,
-# but the wheel, clicks and hover inside Claude Code are lost. To keep them instead, delete this line
-# and hold Shift while dragging (Option in iTerm2) to select natively.
-export CLAUDE_CODE_DISABLE_MOUSE=1
+# In fullscreen mode Claude Code captures the mouse (wheel, clicks, hover) and does the copy itself,
+# with a native tool (pbcopy, wl-copy, xclip, xsel - none exist in this container) or, only over SSH,
+# with OSC 52. Neither works here, so select text natively instead: hold Shift while dragging
+# (Option in iTerm2), then Cmd+C.
 
 args=(--dangerously-skip-permissions)
 

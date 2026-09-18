@@ -29,6 +29,10 @@
     "source=terranova-claude-config,target=/home/vscode/.claude,type=volume",
     "source=terranova-uv-cache,target=/home/vscode/.cache/uv,type=volume",
     "source=terranova-bashhistory,target=/commandhistory,type=volume",
+    // The container's Linux venv, shadowing the host's macOS .venv at the same path. The git hooks
+    // (installed from the host) hardcode <workspace>/.venv/bin/python, so `git commit` in here only
+    // finds a working pre-commit if the venv lives there. Must come after the workspace mount.
+    "source=terranova-venv,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.venv,type=volume",
     // The workspace is writable by the agent, but these paths are executed on the host outside
     // any sandbox (initializeCommand, git hooks/config, Claude Code project settings and hooks),
     // so a compromised session must not be able to plant code in them. Read-only overlays.
@@ -44,9 +48,10 @@
   ],
   "remoteEnv": {
     "UV_CACHE_DIR": "/home/vscode/.cache/uv",
-    // The workspace is shared with the host, so the container's Linux venv must not land in the
-    // project's .venv and clobber the host's one.
-    "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv",
+    // uv's default environment is <workspace>/.venv, which is a volume here (see mounts), so the
+    // container's Linux venv never clobbers the host's. Its tools (pre-commit, poe, pytest...) run
+    // without a `uv run` prefix.
+    "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}",
     "HISTFILE": "/commandhistory/.bash_history",
     // Error reporting would need sentry.io, which accepts anonymous writes and so is left off
     // the firewall allowlist.
