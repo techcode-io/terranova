@@ -16,7 +16,7 @@ dependencies = [
   "click>=8.4.2", # BSD
   "envyaml>=1.10.211231", # MIT
   "jinja2>=3.1.6", # BSD
-  "jsonschema>=4.23.0", # MIT
+  "marshmallow==4.3.1", # MIT
   "mdformat>=0.7.22", # MIT
   "pyserde>=0.32.0", # MIT
   "rich>=15.0.0", # MIT
