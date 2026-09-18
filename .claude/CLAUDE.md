@@ -27,7 +27,7 @@ Terranova uses a **Command → Bind → Process** architecture:
 - **CLI Layer** (`src/terranova/cli.py`): Click-based CLI that loads commands and sets up shared context
 - **Resources** (`src/terranova/resources.py`): Manifest parsing and validation using dataclasses and `@serde`
   - Defines YAML manifest structure: metadata, dependencies, runbooks, imports
-  - Uses jsonschema for validation (candidate for marshmallow replacement)
+  - Uses marshmallow for validation
   - Handles symlink management for shared dependencies
 - **Exceptions** (`src/terranova/exceptions.py`): Custom exception hierarchy for error handling
 - **Utils** (`src/terranova/utils.py`): Shared utilities including logging and context management
@@ -143,7 +143,7 @@ uv run poe release:post
 
 - **click**: CLI framework (defines commands and options)
 - **pyserde**: Serialization/deserialization with `@serde` decorator on dataclasses
-- **jsonschema**: Manifest validation (planned migration to marshmallow)
+- **marshmallow**: Manifest validation
 - **jinja2**: Template rendering for documentation
 - **envyaml**: YAML parsing with environment variable interpolation
 - **rich**: Terminal formatting and logging
@@ -182,7 +182,7 @@ imports:
     as: input_var_name
 ```
 
-Schemas are stored in `src/terranova/schemas/` and loaded via `pkgutil` to validate manifest YAML against jsonschema.
+Schemas are marshmallow `Schema` classes defined in `src/terranova/schemas/manifest.py`, one per manifest version, looked up via the `MANIFEST_SCHEMAS` dict to validate manifest YAML.
 
 ### Dataclass Serialization
 
@@ -227,7 +227,7 @@ Custom exceptions in `src/terranova/exceptions.py`:
 - `MissingRunbookError`: Named runbook not found
 - `MissingRunbookEnvError`: Required env var for runbook missing
 
-Wrap jsonschema `ValidationError` in `InvalidManifestError` when catching.
+Wrap marshmallow `ValidationError` in `InvalidManifestError` when catching.
 
 ### Symlink Management
 

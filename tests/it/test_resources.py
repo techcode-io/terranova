@@ -200,6 +200,36 @@ class TestResourcesManifestFromFile:
         assert env is not None
         assert env[0].with_if == "is_defined"
 
+    def test_unknown_fields_are_allowed(self, tmp_path: Path) -> None:
+        manifest = _write_manifest(
+            tmp_path,
+            """
+            version: "1.0"
+            metadata:
+              name: test
+              description: test
+              extra_metadata_field: ignored
+            extra_top_level_field: ignored
+            """,
+        )
+        result = ResourcesManifest.from_file(manifest)
+        assert result.metadata.name == "test"
+
+    def test_empty_dependencies_list_rejected(self, tmp_path: Path) -> None:
+        manifest = _write_manifest(
+            tmp_path,
+            """
+            version: "1.0"
+            metadata:
+              name: test
+              description: test
+            dependencies: []
+            """,
+        )
+        with pytest.raises(InvalidManifestError) as exc_info:
+            ResourcesManifest.from_file(manifest)
+        assert exc_info.value.__cause__ is not None
+
 
 class TestResourcesRunbookExec:
     """

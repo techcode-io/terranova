@@ -14,9 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import json
 import os
-import pkgutil
 import re
 from collections import ChainMap, defaultdict
 from dataclasses import dataclass
@@ -26,8 +24,7 @@ from re import Pattern
 from typing import cast
 
 import yaml
-from jsonschema.exceptions import ValidationError
-from jsonschema.validators import validate
+from marshmallow import ValidationError
 from serde import field, from_dict
 
 from terranova.exceptions import (
@@ -39,6 +36,7 @@ from terranova.exceptions import (
     VersionManifestError,
 )
 from terranova.process import Command
+from terranova.schemas.manifest import MANIFEST_SCHEMAS
 from terranova.utils import AppContext, Constants, serde
 
 
@@ -173,21 +171,13 @@ class ResourcesManifest:
             version = str(data.get("version", "1.0"))
 
             # Get configuration schema
-            try:
-                raw_schema = pkgutil.get_data(
-                    __name__, f"schemas/manifest_schema_v{version}.json"
-                )
-                if not raw_schema:
-                    raise FileNotFoundError(
-                        f"The schema `schemas/manifest_schema_v{version}.json` can't be found"
-                    )
-            except FileNotFoundError as err:
-                raise VersionManifestError(version) from err
-            schema = cast("dict[str, object]", json.loads(raw_schema))
+            schema_cls = MANIFEST_SCHEMAS.get(version)
+            if schema_cls is None:
+                raise VersionManifestError(version)
 
             # Validate manifest
             try:
-                validate(instance=data, schema=schema)
+                schema_cls().load(data)
             except ValidationError as err:
                 raise InvalidManifestError(path) from err
             return from_dict(ResourcesManifest, data)
