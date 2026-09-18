@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/base:ubuntu
+FROM mcr.microsoft.com/devcontainers/base:debian
 
 # Node, GitHub CLI, and the Claude Code CLI come from devcontainer features (see
 # devcontainer.json). Everything else the sandbox needs is baked in here, root-owned, so that
@@ -36,5 +36,5 @@ RUN \
   chown root:root /usr/local/bin/init-sandbox.sh \
   && chmod 755 /usr/local/bin/init-sandbox.sh \
   && echo 'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-sandbox.sh ""' \
-    > /etc/sudoers.d/terranova-sandbox \
-  && chmod 440 /etc/sudoers.d/terranova-sandbox
+    > /etc/sudoers.d/sandbox \
+  && chmod 440 /etc/sudoers.d/sandbox
