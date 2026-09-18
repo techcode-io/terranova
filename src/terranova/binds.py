@@ -547,3 +547,69 @@ class Terraform(Bind):
     def destroy(self) -> None:
         """Destroy previously-created infrastructure."""
         self._cmd.args("destroy").inherit().exec()
+
+
+class Git(Bind):
+    """Represents a bind to git command."""
+
+    def __init__(self, ctx: AppContext, work_dir: Path) -> None:
+        """Init git bind."""
+        try:
+            super().__init__("git")
+        except CommandNotFound as err:
+            ctx.log.fatal("detect git binary", err)
+        self.cwd(work_dir)
+
+    def repo_root(self) -> str:
+        """Show the absolute path to the top-level of the working tree."""
+        capture = StringIO()
+        self._cmd.args("rev-parse", "--show-toplevel").stdout(capture).stderr(
+            capture
+        ).exec()
+        return capture.getvalue().strip()
+
+    def changed_files(self) -> list[str]:
+        """
+        List files changed relative to HEAD (staged + unstaged) plus untracked files.
+
+        Returns:
+            paths relative to `cwd()` - callers should set `cwd()` to the repo
+            root first (via `repo_root()`) so output is unambiguous.
+        """
+        capture = StringIO()
+        self._cmd.args("diff", "--name-only", "HEAD").stdout(capture).stderr(
+            capture
+        ).exec()
+        tracked = [line for line in capture.getvalue().splitlines() if line]
+
+        capture = StringIO()
+        self._cmd.args(
+            "ls-files", "--others", "--exclude-standard", "--full-name"
+        ).stdout(capture).stderr(capture).exec()
+        untracked = [line for line in capture.getvalue().splitlines() if line]
+
+        return tracked + untracked
+
+    def init(self) -> None:
+        """Create an empty git repository - only used to build fixtures in tests."""
+        self._cmd.args("init", "-q").exec()
+
+    def add(self, *paths: str) -> None:
+        """Stage `paths` (or everything, if none given) - only used in tests."""
+        self._cmd.args("add", *(paths or ("-A",))).exec()
+
+    def commit(self, message: str, *, author: tuple[str, str] | None = None) -> None:
+        """
+        Commit staged changes - only used to build fixtures in tests.
+
+        Args:
+            message: the commit message.
+            author: an optional `(name, email)` override, so tests don't
+                depend on the host's global git identity being configured.
+        """
+        args: list[str] = []
+        if author:
+            name, email = author
+            args += ["-c", f"user.name={name}", "-c", f"user.email={email}"]
+        args += ["commit", "-q", "-m", message]
+        self._cmd.args(*args).exec()

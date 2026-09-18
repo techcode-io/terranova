@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from terranova.cli import main
 from tests import PROJECT_TESTS_FIXTURES_DIR
 from tests.conftest import FakeTerraform
+from tests.e2e.conftest import copy_as_git_repo
 
 
 def test_apply_normal_success(
@@ -221,6 +222,46 @@ def test_apply_with_non_object_tnplan_file_raises_type_error(
     )
     assert result.exit_code != 0
     assert isinstance(result.exception, TypeError)
+
+
+def test_apply_auto_scope_only_processes_changed_group(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+    (conf_dir / "resources" / "group_a" / "manifest.yml").write_text(
+        (conf_dir / "resources" / "group_a" / "manifest.yml").read_text()
+        + "\n# changed\n"
+    )
+
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "apply", "--auto-approve", "--auto-scope"],
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.count("Applying plan:") == 1
+    assert "group_a" in result.stdout
+    assert "group_b" not in result.stdout
+
+
+def test_apply_auto_scope_and_path_or_plan_together_is_usage_error(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "apply", "group_a", "-A", "--auto-approve"],
+    )
+
+    assert result.exit_code != 0
+    assert "--auto-scope" in result.output
 
 
 def test_apply_with_non_string_tnplan_value_raises_type_error(

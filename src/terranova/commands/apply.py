@@ -23,6 +23,8 @@ import click
 from click.exceptions import Exit
 
 from terranova.commands.helpers import (
+    auto_scope_option,
+    auto_scope_resource_dirs,
     execute_tasks,
     mount_context,
     parse_execution_plan,
@@ -89,6 +91,7 @@ class _ApplyTask(ResourceGroupTask):
 
 @click.command("apply")
 @click.argument("path_or_plan", type=str, required=False)
+@auto_scope_option
 @click.option(
     "--auto-approve",
     help="Skip interactive approval of plan before applying.",
@@ -122,6 +125,7 @@ class _ApplyTask(ResourceGroupTask):
 def apply(
     ctx: AppContext,
     path_or_plan: str | None,
+    auto_scope: bool,
     auto_approve: bool,
     target: str,
     fail_at_end: bool,
@@ -132,7 +136,14 @@ def apply(
     # Check if there is a plan to apply
     execution_plan: dict[str, str] | None
     paths: list[tuple[Path, str]]
-    if path_or_plan and path_or_plan.endswith("tnplan"):
+    if auto_scope and path_or_plan:
+        raise click.UsageError(
+            "`--auto-scope`/`-A` can't be combined with `path_or_plan`."
+        )
+    if auto_scope:
+        execution_plan = None
+        paths = auto_scope_resource_dirs(ctx)
+    elif path_or_plan and path_or_plan.endswith("tnplan"):
         execution_plan = parse_execution_plan(
             Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)
         )

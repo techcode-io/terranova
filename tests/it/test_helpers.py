@@ -8,15 +8,17 @@ import click
 import pytest
 from click.exceptions import Exit
 
-from terranova.binds import Terraform
+from terranova.binds import Git, Terraform
 from terranova.commands.helpers import (
     SelectorType,
+    auto_scope_resource_dirs,
     discover_resources,
     extract_import_vars,
     extract_output_var,
     find_all_resource_dirs,
     mount_context,
     read_manifest,
+    resolve_resource_dirs,
     resource_dirs,
 )
 from terranova.resources import (
@@ -34,6 +36,14 @@ metadata:
   name: test
   description: test
 """
+
+
+def _init_git_repo(ctx: AppContext, path: Path) -> None:
+    """Init a real git repo at `path` and commit everything currently in it."""
+    git = Git(ctx, path)
+    git.init()
+    git.add()
+    git.commit("initial", author=("test", "test@example.com"))
 
 
 def _write_manifest_dir(base: Path, *parts: str) -> Path:
@@ -327,3 +337,90 @@ class TestExtractOutputVar:
         with pytest.raises(Exit) as exc_info:
             extract_output_var(app_context, "producer", "some_name")
         assert exc_info.value.exit_code == 5
+
+
+class TestAutoScopeResourceDirs:
+    def test_not_a_git_repo_calls_log_fatal(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        with pytest.raises(Exit):
+            auto_scope_resource_dirs(app_context)
+
+    def test_picks_up_staged_unstaged_and_untracked_changes(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        group_b = _write_manifest_dir(tmp_path, "resources", "group_b")
+        _write_manifest_dir(tmp_path, "resources", "group_c")
+        (tmp_path / "unrelated.txt").write_text("root file")
+        _init_git_repo(app_context, tmp_path)
+
+        # Unstaged change in group_a.
+        (group_a / "manifest.yml").write_text(
+            textwrap.dedent(_VALID_MANIFEST) + "\n# changed\n"
+        )
+        # Staged change in group_b.
+        (group_b / "main.tf").write_text('resource "aws_x" "y" {}\n')
+        Git(app_context, tmp_path / "resources").add("group_b/main.tf")
+        # Untracked change outside the resources dir - must be ignored.
+        (tmp_path / "unrelated.txt").write_text("changed root file")
+
+        result = auto_scope_resource_dirs(app_context)
+
+        assert result == [(group_a, "group_a"), (group_b, "group_b")]
+
+    def test_nested_changed_file_maps_to_owning_group(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        nested_dir = group_a / "modules" / "x"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "main.tf").write_text('resource "aws_x" "y" {}\n')
+        _init_git_repo(app_context, tmp_path)
+
+        # Untracked file nested below group_a's manifest dir.
+        (nested_dir / "new.tf").write_text('resource "aws_x" "z" {}\n')
+
+        result = auto_scope_resource_dirs(app_context)
+
+        assert result == [(group_a, "group_a")]
+
+    def test_no_changes_returns_empty_list(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        _init_git_repo(app_context, tmp_path)
+
+        assert auto_scope_resource_dirs(app_context) == []
+
+
+class TestResolveResourceDirs:
+    def test_path_and_auto_scope_together_raises_usage_error(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        with pytest.raises(click.UsageError):
+            resolve_resource_dirs(app_context, "group_a", True)
+
+    def test_without_auto_scope_delegates_to_resource_dirs(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        _write_manifest_dir(tmp_path, "resources", "group_b")
+        result = resolve_resource_dirs(app_context, "group_a", False)
+        assert result == [(group_a, "group_a")]
+
+    def test_auto_scope_delegates_to_auto_scope_resource_dirs(
+        self, app_context: AppContext, tmp_path: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        _write_manifest_dir(tmp_path, "resources", "group_b")
+        _init_git_repo(app_context, tmp_path)
+        (group_a / "manifest.yml").write_text(
+            textwrap.dedent(_VALID_MANIFEST) + "\n# changed\n"
+        )
+
+        result = resolve_resource_dirs(app_context, None, True)
+
+        assert result == [(group_a, "group_a")]

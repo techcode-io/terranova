@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from terranova.cli import main
 from tests import PROJECT_TESTS_FIXTURES_DIR
 from tests.conftest import FakeTerraform
+from tests.e2e.conftest import copy_as_git_repo
 
 
 def _read_saved_plan(out_file: Path) -> dict[str, str]:
@@ -169,6 +170,43 @@ def test_plan_strategy_parallel_respects_import_dependency_order(
         main, args=["--conf-dir", str(fixture_dir), "plan", "--strategy", "parallel"]
     )
     assert result.exit_code == 0
+
+
+def test_plan_auto_scope_only_processes_changed_group(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+    (conf_dir / "resources" / "group_a" / "manifest.yml").write_text(
+        (conf_dir / "resources" / "group_a" / "manifest.yml").read_text()
+        + "\n# changed\n"
+    )
+
+    result = runner.invoke(
+        main, args=["--conf-dir", str(conf_dir), "plan", "--auto-scope"]
+    )
+
+    assert result.exit_code == 0
+    assert "group_a" in result.stdout
+    assert "group_b" not in result.stdout
+
+
+def test_plan_auto_scope_and_path_together_is_usage_error(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+
+    result = runner.invoke(
+        main, args=["--conf-dir", str(conf_dir), "plan", "group_a", "-A"]
+    )
+
+    assert result.exit_code != 0
+    assert "--auto-scope" in result.output
 
 
 def test_plan_strategy_parallel_fail_at_end_stops_next_wave(

@@ -15,10 +15,15 @@
 # limitations under the License.
 #
 import os
+import shutil
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner, Result
+
+from terranova.binds import Git
+from terranova.utils import AppContext
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +36,23 @@ def _restore_cwd() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
+
+
+def copy_as_git_repo(fixture_dir: Path, dest: Path) -> None:
+    """
+    Copy `fixture_dir` to `dest` and commit it as a fresh git repo.
+
+    For `--auto-scope` e2e coverage: fixtures under `tests/fixtures` are
+    shared, read-only trees, so scoping tests that need to dirty the working
+    tree operate on a throwaway git-managed copy instead.
+    """
+    shutil.copytree(fixture_dir, dest)
+
+    ctx = AppContext.create(debug=False, verbose=False, conf_dir=dest)
+    git = Git(ctx, dest)
+    git.init()
+    git.add()
+    git.commit("initial", author=("test", "test@example.com"))
 
 
 def assert_result(result: Result) -> tuple[str, str | None]:

@@ -5,6 +5,14 @@ from click.testing import CliRunner
 
 from terranova.cli import main
 from tests import PROJECT_TESTS_FIXTURES_DIR
+from tests.e2e.conftest import copy_as_git_repo
+
+_MINIMAL_MANIFEST = """
+version: "1.0"
+metadata:
+  name: {name}
+  description: {name} group
+"""
 
 
 def test_docs_generates_markdown_for_each_resource_group(
@@ -130,6 +138,48 @@ def test_docs_omits_url_and_contact_when_absent(
     content = (docs_dir / "no_url_contact.md").read_text()
     assert "[Source]" not in content
     assert "[Contact]" not in content
+
+
+def test_docs_auto_scope_only_regenerates_changed_group_and_keeps_others(
+    runner: CliRunner, tmp_path: Path
+) -> None:
+    conf_dir = tmp_path / "conf"
+    resources_dir = conf_dir / "resources"
+    for name in ("group_a", "group_b"):
+        group_dir = resources_dir / name
+        group_dir.mkdir(parents=True)
+        (group_dir / "manifest.yml").write_text(
+            textwrap.dedent(_MINIMAL_MANIFEST.format(name=name))
+        )
+    copy_as_git_repo(conf_dir, tmp_path / "conf_repo")
+    conf_dir = tmp_path / "conf_repo"
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    stale_doc = docs_dir / "group_b.md"
+    stale_doc.write_text("previously generated content")
+
+    (conf_dir / "resources" / "group_a" / "manifest.yml").write_text(
+        (conf_dir / "resources" / "group_a" / "manifest.yml").read_text()
+        + "\n# changed\n"
+    )
+
+    result = runner.invoke(
+        main,
+        args=[
+            "--conf-dir",
+            str(conf_dir),
+            "docs",
+            "--docs-dir",
+            str(docs_dir),
+            "--auto-scope",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (docs_dir / "group_a.md").exists()
+    # A scoped run must not wipe docs for groups outside its scope.
+    assert stale_doc.exists()
 
 
 def test_docs_includes_url_and_contact_when_present(
