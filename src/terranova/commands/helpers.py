@@ -23,14 +23,28 @@ import click
 from click import Parameter
 from click.exceptions import Exit
 
-from terranova.binds import Terraform
-from terranova.exceptions import InvalidResourcesError, ManifestError
+from terranova.binds import Git, Terraform
+from terranova.exceptions import (
+    GitRepositoryError,
+    InvalidResourcesError,
+    ManifestError,
+)
 from terranova.executor import ResourceGroupResult, ResourceGroupTask, create_executor
 from terranova.graph import Wave, build_dependency_graph, compute_waves
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
 from terranova.utils import AppContext, Constants
+
+auto_scope_option = click.option(
+    "--auto-scope",
+    "-A",
+    help="Scope to resource groups affected by the current git diff (working "
+    + "tree and staged changes vs HEAD, plus untracked files) instead of an "
+    + "explicit `path`.",
+    is_flag=True,
+)
+"""Shared `--auto-scope`/`-A` option for `plan`, `apply`, `destroy` and `docs`."""
 
 flat_strategy_option = click.option(
     "--strategy",
@@ -177,6 +191,66 @@ def resource_dirs(ctx: AppContext, path: str | None) -> list[tuple[Path, str]]:
     if path:
         resources_dir = resources_dir.joinpath(path)
     return find_all_resource_dirs(ctx, resources_dir)
+
+
+def _match_resource_dirs(
+    ctx: AppContext, all_dirs: list[tuple[Path, str]], changed_files: list[Path]
+) -> list[tuple[Path, str]]:
+    """Map each changed file to its nearest ancestor resource-group dir, deduped."""
+    resources_root = ctx.resources_dir.resolve()
+    by_full_path = {
+        full_path.resolve(): (full_path, rel_path) for full_path, rel_path in all_dirs
+    }
+
+    matched: dict[Path, tuple[Path, str]] = {}
+    for changed_file in changed_files:
+        current = changed_file.resolve().parent
+        while True:
+            if current in by_full_path:
+                matched[current] = by_full_path[current]
+                break
+            if current == resources_root or resources_root not in current.parents:
+                break
+            current = current.parent
+
+    return sorted(matched.values(), key=lambda entry: entry[1])
+
+
+def auto_scope_resource_dirs(ctx: AppContext) -> list[tuple[Path, str]]:
+    """
+    Scope resource dirs to those affected by the current git diff (working
+    tree and staged changes vs HEAD, including untracked files).
+    This function handle errors by logging and exiting.
+    """
+    # `ctx.conf_dir` is guaranteed to exist (`--conf-dir` requires it), unlike
+    # `ctx.resources_dir` (e.g. before a first `terranova init`) - using it as
+    # `cwd` avoids a spurious `CommandNotFound` from `Popen` failing to chdir.
+    git = Git(ctx, ctx.conf_dir)
+    try:
+        root = Path(git.repo_root())
+    except ErrorReturnCode:
+        ctx.log.fatal(
+            f"resolve the git repository at `{ctx.conf_dir.as_posix()}`",
+            GitRepositoryError(ctx.conf_dir),
+        )
+    git.cwd(root)
+    changed_files = [root / rel for rel in git.changed_files()]
+
+    all_dirs = find_all_resource_dirs(ctx, ctx.resources_dir)
+    return _match_resource_dirs(ctx, all_dirs, changed_files)
+
+
+def resolve_resource_dirs(
+    ctx: AppContext, path: str | None, auto_scope: bool
+) -> list[tuple[Path, str]]:
+    """Shared `path`/`--auto-scope` resolution for `plan`, `destroy` and `docs`."""
+    if auto_scope and path:
+        raise click.UsageError(
+            "`--auto-scope`/`-A` can't be combined with an explicit `path`."
+        )
+    if auto_scope:
+        return auto_scope_resource_dirs(ctx)
+    return resource_dirs(ctx, path)
 
 
 def mount_context(

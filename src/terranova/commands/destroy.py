@@ -17,18 +17,23 @@
 import click
 from click.exceptions import Exit
 
-from terranova.commands.helpers import mount_context, resource_dirs
+from terranova.commands.helpers import (
+    auto_scope_option,
+    mount_context,
+    resolve_resource_dirs,
+)
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext
 
 
 @click.command("destroy")
 @click.argument("path", type=str, required=False)
+@auto_scope_option
 @click.pass_obj
-def destroy(ctx: AppContext, path: str | None) -> None:
+def destroy(ctx: AppContext, path: str | None, auto_scope: bool) -> None:
     """Destroy previously-created resources."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resolve_resource_dirs(ctx, path, auto_scope)
 
     # Format all paths
     for full_path, rel_path in paths:

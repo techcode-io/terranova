@@ -24,10 +24,11 @@ from click.exceptions import Exit
 
 from terranova.binds import TerraformChangeError
 from terranova.commands.helpers import (
+    auto_scope_option,
     execute_tasks,
     mount_context,
     read_manifests_and_waves,
-    resource_dirs,
+    resolve_resource_dirs,
     write_execution_plan,
 )
 from terranova.executor import ResourceGroupResult, ResourceGroupTask
@@ -108,6 +109,7 @@ class _PlanTask(ResourceGroupTask):
 
 @click.command("plan")
 @click.argument("path", type=str, required=False)
+@auto_scope_option
 @click.option(
     "--input/--no-input",
     help="Ask for input for variables if not directly set.",
@@ -167,6 +169,7 @@ class _PlanTask(ResourceGroupTask):
 def plan(
     ctx: AppContext,
     path: str | None,
+    auto_scope: bool,
     input: bool,
     no_color: bool,
     parallelism: int,
@@ -178,7 +181,7 @@ def plan(
 ) -> None:
     """Show changes required by the current configuration."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resolve_resource_dirs(ctx, path, auto_scope)
 
     # Execution plan
     execution_plan: dict[str, str] = {}

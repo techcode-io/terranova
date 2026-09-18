@@ -116,6 +116,17 @@ class InteractiveApprovalError(ExplainedError):
         )
 
 
+class GitRepositoryError(ExplainedError):
+    """Represents a failure to resolve the git repository backing the resources directory."""
+
+    def __init__(self, resources_dir: Path) -> None:
+        """Init git repository error."""
+        super().__init__(
+            cause=f"`{resources_dir.as_posix()}` isn't inside a git repository",
+            resolution="Run `--auto-scope` from a git-managed directory, or omit the flag.",
+        )
+
+
 class GraphError(ExplainedError):
     """Represents an error building a dependency graph between resource groups."""
 

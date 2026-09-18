@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import os
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -24,7 +23,12 @@ import click
 import mdformat
 from jinja2 import Environment, PackageLoader
 
-from terranova.commands.helpers import discover_resources, read_manifest
+from terranova.commands.helpers import (
+    auto_scope_option,
+    discover_resources,
+    read_manifest,
+    resolve_resource_dirs,
+)
 from terranova.utils import AppContext, Constants
 
 
@@ -35,6 +39,8 @@ def format_markdown(text: str) -> str:
 
 
 @click.command("docs")
+@click.argument("path", type=str, required=False)
+@auto_scope_option
 @click.option(
     "--docs-dir",
     help="Docs directory path.",
@@ -43,24 +49,17 @@ def format_markdown(text: str) -> str:
     default="./docs",
 )
 @click.pass_obj
-def docs(ctx: AppContext, docs_dir: Path) -> None:
+def docs(ctx: AppContext, path: str | None, auto_scope: bool, docs_dir: Path) -> None:
     """Generate documentation for all resources."""
     # Find all resources manifests
-    jobs: list[tuple[Path, Path]] = []
-    for path, _, files in os.walk(ctx.resources_dir.as_posix()):
-        for file in files:
-            if os.path.basename(file) == Constants.MANIFEST_FILE_NAME:
-                jobs.append(
-                    (
-                        Path(path),
-                        docs_dir.joinpath(
-                            os.path.relpath(path, ctx.resources_dir.as_posix())
-                        ),
-                    )
-                )
+    paths = resolve_resource_dirs(ctx, path, auto_scope)
+    jobs: list[tuple[Path, Path]] = [
+        (full_path, docs_dir.joinpath(rel_path)) for full_path, rel_path in paths
+    ]
 
-    # Clean docs dir
-    if docs_dir.exists():
+    # Clean docs dir, unless scoped - a scoped run must not delete docs for
+    # resource groups outside its scope.
+    if not path and not auto_scope and docs_dir.exists():
         shutil.rmtree(docs_dir.as_posix())
 
     # Generate docs
