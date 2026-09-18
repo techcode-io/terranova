@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from terranova.utils import AppContext
+from terranova.utils import log
 
 _FAKE_TERRAFORM_SCRIPT = """#!/usr/bin/env python3
 import base64
@@ -64,9 +64,20 @@ sys.exit(exit_code)
 """
 
 
+@pytest.fixture(autouse=True)
+def _reset_log() -> None:  # pyright: ignore[reportUnusedFunction]
+    """Reset the ambient `log` before every test."""
+    log.configure(debug=False)
+
+
 @pytest.fixture
-def app_context(tmp_path: Path) -> AppContext:
-    return AppContext.create(debug=False, verbose=False, conf_dir=tmp_path)
+def resources_dir(tmp_path: Path) -> Path:
+    return tmp_path / "resources"
+
+
+@pytest.fixture
+def plugin_cache_dir(tmp_path: Path) -> Path:
+    return tmp_path / ".terraform" / "plugin-cache"
 
 
 class FakeTerraform:

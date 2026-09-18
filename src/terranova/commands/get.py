@@ -19,7 +19,7 @@ from rich.table import Table
 
 from terranova.commands.helpers import SelectorType, discover_resources, resource_dirs
 from terranova.resources import Selector
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
 @click.command("get")
@@ -31,7 +31,7 @@ from terranova.utils import AppContext
 def get(ctx: AppContext, path: str | None, selectors: list[Selector] | None) -> None:
     """Display one or many resources."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resource_dirs(ctx.resources_dir, path)
 
     # Render resources table
     table = Table()
@@ -39,7 +39,7 @@ def get(ctx: AppContext, path: str | None, selectors: list[Selector] | None) -> 
     table.add_column("Type", justify="left", style="green")
     table.add_column("Name", style="magenta")
     for full_path, rel_path in paths:
-        resources = discover_resources(ctx, full_path, selectors)
+        resources = discover_resources(full_path, selectors)
         for resource in resources:
             table.add_row(rel_path, resource.type, resource.name)
-    ctx.console.print(table)
+    log.render(table)

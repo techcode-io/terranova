@@ -26,7 +26,7 @@ from terranova.utils import AppContext
 def ls(ctx: AppContext, path: str | None) -> None:
     """List resources."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resource_dirs(ctx.resources_dir, path)
 
     # Display resource paths
     for full_path, _ in paths:

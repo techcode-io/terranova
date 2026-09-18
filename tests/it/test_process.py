@@ -4,10 +4,10 @@ import asyncio
 import os
 import sys
 from asyncio import Queue as AsyncQueue
+from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
 from queue import Queue
-from typing import Callable
 
 import pytest
 
@@ -148,7 +148,7 @@ class TestCommand:
 
     def test_stdout_setter_callable(self) -> None:
         cmd = Command("echo")
-        callback: Callable[[str], None] = lambda _: None  # noqa: E731
+        callback: Callable[[str], None] = lambda _: None
         cmd.stdout(callback)
         assert cmd.stdout() is callback
 

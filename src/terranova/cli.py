@@ -43,7 +43,7 @@ from terranova.commands.runbook import runbook
 from terranova.commands.taint import taint
 from terranova.commands.untaint import untaint
 from terranova.commands.validate import validate
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
 @click.group("terranova")
@@ -67,7 +67,8 @@ from terranova.utils import AppContext
 @click.pass_context
 def main(ctx: click.Context, debug: bool, verbose: bool, conf_dir: Path) -> None:
     """Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale."""
-    ctx.obj = AppContext.create(debug, verbose, conf_dir)
+    log.configure(debug)
+    ctx.obj = AppContext(conf_dir=conf_dir, verbose=verbose)
 
 
 main.add_command(apply)

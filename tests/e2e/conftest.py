@@ -23,7 +23,6 @@ import pytest
 from click.testing import CliRunner, Result
 
 from terranova.binds import Git
-from terranova.utils import AppContext
 
 
 @pytest.fixture(autouse=True)
@@ -48,8 +47,7 @@ def copy_as_git_repo(fixture_dir: Path, dest: Path) -> None:
     """
     shutil.copytree(fixture_dir, dest)
 
-    ctx = AppContext.create(debug=False, verbose=False, conf_dir=dest)
-    git = Git(ctx, dest)
+    git = Git(dest)
     git.init()
     git.add()
     git.commit("initial", author=("test", "test@example.com"))

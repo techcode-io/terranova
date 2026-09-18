@@ -18,6 +18,7 @@ import contextlib
 import ctypes
 import json
 import os
+import re
 import shutil
 import sys
 from asyncio import (
@@ -44,6 +45,11 @@ CONTAINER_ENGINE_ENV: Final[str] = "CONTAINER_ENGINE"
 # Where the workspace is mounted in the container; read by `.devcontainer/devcontainer.json`.
 CONTAINER_WORKSPACE_ENV: Final[str] = "CONTAINER_WORKSPACE"
 GENERATED_DIR: Final[Path] = Path(WORKSPACE_FOLDER) / ".devcontainer" / ".generated"
+# The host's Claude Code state for this project (sessions and memory) and the name of its
+# directory in the container's `~/.claude/projects`; both read by `.devcontainer/devcontainer.json`.
+CLAUDE_PROJECT_DIR_ENV: Final[str] = "CLAUDE_PROJECT_DIR"
+CLAUDE_PROJECT_KEY_ENV: Final[str] = "CLAUDE_PROJECT_KEY"
+CONTAINER_CLAUDE_PROJECTS: Final[str] = "/home/vscode/.claude/projects"
 
 # The IDE plugin listens on an ephemeral loopback port of the host and writes that port plus a
 # per-start auth token to `~/.claude/ide/<port>.lock`. The sandbox can reach neither. So the host
@@ -96,8 +102,11 @@ async def claude() -> None:
     os.environ[CONTAINER_WORKSPACE_ENV] = (
         container_workspace  # read by devcontainer.json
     )
+    claude_project_mount = _share_claude_project(workspace, container_workspace)
     devcontainer = DevContainer()
-    stale = devcontainer.has_stale_container(workspace, container_workspace, engine)
+    stale = devcontainer.has_stale_container(
+        workspace, [container_workspace, claude_project_mount], engine
+    )
     if stale:
         print("Sandbox container is out of date with .devcontainer, recreating it.")
     try:
@@ -125,6 +134,35 @@ async def claude() -> None:
             relay.server.close()
             relay.server.close_clients()
             await relay.server.wait_closed()
+
+
+def _claude_config_dir() -> Path:
+    """The host's Claude Code config directory."""
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
+def _claude_project_key(path: str) -> str:
+    """Name of a project's directory under `~/.claude/projects`: non-alphanumerics become `-`."""
+    return re.sub(r"[^a-zA-Z0-9]", "-", path)
+
+
+def _share_claude_project(workspace: Path, container_workspace: str) -> str:
+    """Expose the host's sessions and memory for this project to the container.
+
+    Claude Code keeps them in `~/.claude/projects/<key>/`, the key derived from the working
+    directory, which is `container_workspace` inside the container. Creates the host directory
+    (a bind mount needs its source to exist) and its `memory/` subdirectory, which
+    `devcontainer.json` mounts read-only so a session running without permission prompts can't plant
+    instructions that host sessions load automatically. Returns the container-side mount point.
+    """
+    project_dir = (
+        _claude_config_dir() / "projects" / _claude_project_key(str(workspace))
+    )
+    (project_dir / "memory").mkdir(parents=True, exist_ok=True)
+    key = _claude_project_key(container_workspace)
+    os.environ[CLAUDE_PROJECT_DIR_ENV] = project_dir.as_posix()
+    os.environ[CLAUDE_PROJECT_KEY_ENV] = key
+    return f"{CONTAINER_CLAUDE_PROJECTS}/{key}"
 
 
 def _container_engine() -> str:
@@ -187,15 +225,19 @@ def _process_alive(pid: int) -> bool:
     `os.kill(pid, 0)` is the POSIX idiom, but on Windows every signal other than Ctrl-C/Ctrl-Break
     terminates the process - here, the user's IDE.
     """
-    if os.name == "nt":
-        kernel32 = getattr(ctypes, "windll").kernel32
-        handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if sys.platform == "win32":
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(  # pyright: ignore[reportAny]
+            _PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
         if not handle:
             return False
         try:
             exit_code = ctypes.c_ulong()
-            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
-            return bool(ok) and exit_code.value == _STILL_ACTIVE
+            ok = kernel32.GetExitCodeProcess(  # pyright: ignore[reportAny]
+                handle, ctypes.byref(exit_code)
+            )
+            return bool(ok) and exit_code.value == _STILL_ACTIVE  # pyright: ignore[reportAny]
         finally:
             kernel32.CloseHandle(handle)
     try:
@@ -209,12 +251,12 @@ def _process_alive(pid: int) -> bool:
 
 def _find_ide_lock(workspace: Path) -> IdeLock | None:
     """Find the live IDE whose open workspace contains `workspace`, most recent first."""
-    config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    config_dir = _claude_config_dir()
     found: list[tuple[float, IdeLock]] = []
     for path in (config_dir / "ide").glob("*.lock"):
         try:
             # The annotation is static only: a malformed file still lands in the `except` below.
-            data: IdeLockFile = json.loads(path.read_text())
+            data: IdeLockFile = json.loads(path.read_text())  # pyright: ignore[reportAny]
             if not _process_alive(data["pid"]):  # lock files outlive a crashed IDE
                 continue
             lock = IdeLock(
@@ -244,7 +286,7 @@ async def _start_ide_relay(workspace: Path) -> IdeRelay | None:
     except OSError as err:
         print(
             f"Can't listen on 127.0.0.1:{IDE_RELAY_PORT} for the IDE relay ({err}), "
-            "starting without IDE integration.",
+            + "starting without IDE integration.",
             file=sys.stderr,
         )
         return None

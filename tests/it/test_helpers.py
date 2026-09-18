@@ -27,7 +27,6 @@ from terranova.resources import (
     ResourcesMetadata,
     Selector,
 )
-from terranova.utils import AppContext
 from tests.conftest import FakeTerraform
 
 _VALID_MANIFEST: Final[str] = """
@@ -38,9 +37,9 @@ metadata:
 """
 
 
-def _init_git_repo(ctx: AppContext, path: Path) -> None:
+def _init_git_repo(path: Path) -> None:
     """Init a real git repo at `path` and commit everything currently in it."""
-    git = Git(ctx, path)
+    git = Git(path)
     git.init()
     git.add()
     git.commit("initial", author=("test", "test@example.com"))
@@ -83,145 +82,120 @@ class TestSelectorTypeConvert:
 
 
 class TestReadManifest:
-    def test_read_manifest_success(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_read_manifest_success(self, tmp_path: Path) -> None:
         resource_dir = _write_manifest_dir(tmp_path, "resources", "group_a")
-        manifest = read_manifest(app_context, resource_dir)
+        manifest = read_manifest(resource_dir)
         assert manifest.metadata.name == "test"
 
-    def test_read_manifest_missing_calls_log_fatal(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_read_manifest_missing_calls_log_fatal(self, tmp_path: Path) -> None:
         with pytest.raises(Exit):
-            read_manifest(app_context, tmp_path / "does_not_exist")
+            read_manifest(tmp_path / "does_not_exist")
 
-    def test_read_manifest_invalid_calls_log_fatal(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_read_manifest_invalid_calls_log_fatal(self, tmp_path: Path) -> None:
         resource_dir = tmp_path / "resources" / "group_a"
         resource_dir.mkdir(parents=True)
         (resource_dir / "manifest.yml").write_text("key: [unclosed")
         with pytest.raises(Exit):
-            read_manifest(app_context, resource_dir)
+            read_manifest(resource_dir)
 
 
 class TestDiscoverResources:
-    def test_discover_resources_success(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_discover_resources_success(self, tmp_path: Path) -> None:
         resource_dir = tmp_path / "group_a"
         resource_dir.mkdir()
         (resource_dir / "main.tf").write_text(
             '/* @name foo */\nresource "aws_x" "y" {}\n'
         )
-        resources = discover_resources(app_context, resource_dir)
+        resources = discover_resources(resource_dir)
         assert len(resources) == 1
 
-    def test_discover_resources_invalid_calls_log_fatal(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_discover_resources_invalid_calls_log_fatal(self, tmp_path: Path) -> None:
         resource_dir = tmp_path / "group_a"
         resource_dir.mkdir()
         (resource_dir / "main.tf").write_text('resource "aws_x" "y" {}\n')
         with pytest.raises(Exit):
-            discover_resources(app_context, resource_dir)
+            discover_resources(resource_dir)
 
 
 class TestFindAllResourceDirs:
     def test_relative_path_matches_dir_name(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_dir = _write_manifest_dir(tmp_path, "resources", "group_a")
-        result = find_all_resource_dirs(app_context, app_context.resources_dir)
+        result = find_all_resource_dirs(resources_dir)
         assert result == [(group_dir, "group_a")]
 
-    def test_nested_relative_path(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_nested_relative_path(self, tmp_path: Path, resources_dir: Path) -> None:
         nested_dir = _write_manifest_dir(tmp_path, "resources", "team", "group_a")
-        result = find_all_resource_dirs(app_context, app_context.resources_dir)
+        result = find_all_resource_dirs(resources_dir)
         assert result == [(nested_dir, "team/group_a")]
 
     def test_ignores_non_manifest_files(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         other_dir = tmp_path / "resources" / "group_a"
         other_dir.mkdir(parents=True)
         (other_dir / "other.yml").write_text("not a manifest")
-        result = find_all_resource_dirs(app_context, app_context.resources_dir)
+        result = find_all_resource_dirs(resources_dir)
         assert result == []
 
-    def test_bug_relative_path_slicing_is_anchored_to_global_resources_dir(
-        self, tmp_path: Path
+    def test_search_dir_restricts_scan_but_paths_stay_relative_to_resources_dir(
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
-        """
-        Regression test documenting a landmine: `find_all_resource_dirs`
-        slices relative paths using `len(ctx.resources_dir.as_posix())`
-        (the context's conf-derived path), not a length derived from its own
-        `resources_dir` parameter. As long as callers only ever pass in
-        `ctx.resources_dir` or a descendant of it (as `resource_dirs()`
-        does), the slice is correct. But calling this function directly with
-        a directory that is NOT a descendant of the context's resources dir
-        produces a garbage relative path rather than a clean one — this must
-        not be "fixed" accidentally as a side effect of an unrelated
-        refactor without also updating callers.
-        """
-        ctx = AppContext.create(debug=False, verbose=False, conf_dir=tmp_path / "conf")
-        other_root = tmp_path / "elsewhere"
-        group_dir = other_root / "group_a"
-        group_dir.mkdir(parents=True)
-        (group_dir / "manifest.yml").write_text(textwrap.dedent(_VALID_MANIFEST))
+        group_a = _write_manifest_dir(tmp_path, "resources", "team", "group_a")
+        _write_manifest_dir(tmp_path, "resources", "other", "group_b")
 
-        result = find_all_resource_dirs(ctx, other_root)
+        result = find_all_resource_dirs(resources_dir, resources_dir / "team")
 
-        assert result[0][1] != "group_a"
+        assert result == [(group_a, "team/group_a")]
 
 
 class TestResourceDirs:
     def test_no_manifests_returns_empty_list(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         (tmp_path / "resources").mkdir()
-        assert resource_dirs(app_context, None) == []
+        assert resource_dirs(resources_dir, None) == []
 
-    def test_nonexistent_path_returns_empty_list(self, app_context: AppContext) -> None:
-        assert resource_dirs(app_context, "does/not/exist") == []
+    def test_nonexistent_path_returns_empty_list(self, resources_dir: Path) -> None:
+        assert resource_dirs(resources_dir, "does/not/exist") == []
 
     def test_with_path_filters_to_subdir(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
         _write_manifest_dir(tmp_path, "resources", "group_b")
-        result = resource_dirs(app_context, "group_a")
+        result = resource_dirs(resources_dir, "group_a")
         assert result == [(group_a, "group_a")]
 
     def test_without_path_returns_all(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "group_a")
         _write_manifest_dir(tmp_path, "resources", "group_b")
-        result = resource_dirs(app_context, None)
+        result = resource_dirs(resources_dir, None)
         assert {rel for _, rel in result} == {"group_a", "group_b"}
 
 
 class TestMountContext:
     def test_reads_manifest_when_not_provided(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _ = fake_terraform_bin
         resource_dir = _write_manifest_dir(tmp_path, "resources", "group_a")
-        terraform = mount_context(app_context, resource_dir)
+        terraform = mount_context(resource_dir, resources_dir, plugin_cache_dir)
         assert isinstance(terraform, Terraform)
 
     def test_uses_provided_manifest_skips_read(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _ = fake_terraform_bin
         resource_dir = tmp_path / "resources" / "group_a"
@@ -232,14 +206,17 @@ class TestMountContext:
         )
         # Does not raise despite the on-disk manifest being invalid YAML,
         # because the provided manifest short-circuits read_manifest().
-        terraform = mount_context(app_context, resource_dir, manifest=manifest)
+        terraform = mount_context(
+            resource_dir, resources_dir, plugin_cache_dir, manifest=manifest
+        )
         assert isinstance(terraform, Terraform)
 
     def test_import_vars_true_resolves_and_forwards_variables(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer")
         consumer_dir = tmp_path / "resources" / "consumer"
@@ -254,24 +231,31 @@ class TestMountContext:
         )
         fake_terraform_bin.set_stdout("chained-value")
         terraform = mount_context(
-            app_context, consumer_dir, manifest=manifest, import_vars=True
+            consumer_dir,
+            resources_dir,
+            plugin_cache_dir,
+            manifest=manifest,
+            import_vars=True,
         )
         terraform.graph()
         assert fake_terraform_bin.captured_env["TF_VAR_input_var"] == "chained-value"
 
 
 class TestExtractImportVars:
-    def test_empty_when_no_imports(self, app_context: AppContext) -> None:
+    def test_empty_when_no_imports(
+        self, resources_dir: Path, plugin_cache_dir: Path
+    ) -> None:
         manifest = ResourcesManifest(
             metadata=ResourcesMetadata(name="x", description="y")
         )
-        assert extract_import_vars(app_context, manifest) == {}
+        assert extract_import_vars(manifest, resources_dir, plugin_cache_dir) == {}
 
     def test_uses_resource_name_when_target_absent(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer")
         fake_terraform_bin.set_stdout("val")
@@ -279,13 +263,16 @@ class TestExtractImportVars:
             metadata=ResourcesMetadata(name="x", description="y"),
             imports=[ResourcesImport(source="producer", resource="foo")],
         )
-        assert extract_import_vars(app_context, manifest) == {"foo": "val"}
+        assert extract_import_vars(manifest, resources_dir, plugin_cache_dir) == {
+            "foo": "val"
+        }
 
     def test_uses_target_when_present(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer")
         fake_terraform_bin.set_stdout("val")
@@ -293,13 +280,16 @@ class TestExtractImportVars:
             metadata=ResourcesMetadata(name="x", description="y"),
             imports=[ResourcesImport(source="producer", resource="foo", target="bar")],
         )
-        assert extract_import_vars(app_context, manifest) == {"bar": "val"}
+        assert extract_import_vars(manifest, resources_dir, plugin_cache_dir) == {
+            "bar": "val"
+        }
 
     def test_multiple_imports_all_resolved(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer_a")
         _write_manifest_dir(tmp_path, "resources", "producer_b")
@@ -311,50 +301,55 @@ class TestExtractImportVars:
                 ResourcesImport(source="producer_b", resource="bar"),
             ],
         )
-        result = extract_import_vars(app_context, manifest)
+        result = extract_import_vars(manifest, resources_dir, plugin_cache_dir)
         assert result == {"foo": "val", "bar": "val"}
 
 
 class TestExtractOutputVar:
     def test_success(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer")
         fake_terraform_bin.set_stdout("value123")
-        assert extract_output_var(app_context, "producer", "some_name") == "value123"
+        assert (
+            extract_output_var("producer", "some_name", resources_dir, plugin_cache_dir)
+            == "value123"
+        )
 
     def test_error_return_code_raises_exit_with_matching_code(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "producer")
         fake_terraform_bin.set_exit_code(5)
         with pytest.raises(Exit) as exc_info:
-            extract_output_var(app_context, "producer", "some_name")
+            extract_output_var("producer", "some_name", resources_dir, plugin_cache_dir)
         assert exc_info.value.exit_code == 5
 
 
 class TestAutoScopeResourceDirs:
     def test_not_a_git_repo_calls_log_fatal(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "group_a")
         with pytest.raises(Exit):
-            auto_scope_resource_dirs(app_context)
+            auto_scope_resource_dirs(tmp_path, resources_dir)
 
     def test_picks_up_staged_unstaged_and_untracked_changes(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
         group_b = _write_manifest_dir(tmp_path, "resources", "group_b")
         _write_manifest_dir(tmp_path, "resources", "group_c")
         (tmp_path / "unrelated.txt").write_text("root file")
-        _init_git_repo(app_context, tmp_path)
+        _init_git_repo(tmp_path)
 
         # Unstaged change in group_a.
         (group_a / "manifest.yml").write_text(
@@ -362,65 +357,65 @@ class TestAutoScopeResourceDirs:
         )
         # Staged change in group_b.
         (group_b / "main.tf").write_text('resource "aws_x" "y" {}\n')
-        Git(app_context, tmp_path / "resources").add("group_b/main.tf")
+        Git(tmp_path / "resources").add("group_b/main.tf")
         # Untracked change outside the resources dir - must be ignored.
         (tmp_path / "unrelated.txt").write_text("changed root file")
 
-        result = auto_scope_resource_dirs(app_context)
+        result = auto_scope_resource_dirs(tmp_path, resources_dir)
 
         assert result == [(group_a, "group_a"), (group_b, "group_b")]
 
     def test_nested_changed_file_maps_to_owning_group(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
         nested_dir = group_a / "modules" / "x"
         nested_dir.mkdir(parents=True)
         (nested_dir / "main.tf").write_text('resource "aws_x" "y" {}\n')
-        _init_git_repo(app_context, tmp_path)
+        _init_git_repo(tmp_path)
 
         # Untracked file nested below group_a's manifest dir.
         (nested_dir / "new.tf").write_text('resource "aws_x" "z" {}\n')
 
-        result = auto_scope_resource_dirs(app_context)
+        result = auto_scope_resource_dirs(tmp_path, resources_dir)
 
         assert result == [(group_a, "group_a")]
 
     def test_no_changes_returns_empty_list(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "group_a")
-        _init_git_repo(app_context, tmp_path)
+        _init_git_repo(tmp_path)
 
-        assert auto_scope_resource_dirs(app_context) == []
+        assert auto_scope_resource_dirs(tmp_path, resources_dir) == []
 
 
 class TestResolveResourceDirs:
     def test_path_and_auto_scope_together_raises_usage_error(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         _write_manifest_dir(tmp_path, "resources", "group_a")
         with pytest.raises(click.UsageError):
-            resolve_resource_dirs(app_context, "group_a", True)
+            resolve_resource_dirs(tmp_path, resources_dir, "group_a", True)
 
     def test_without_auto_scope_delegates_to_resource_dirs(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
         _write_manifest_dir(tmp_path, "resources", "group_b")
-        result = resolve_resource_dirs(app_context, "group_a", False)
+        result = resolve_resource_dirs(tmp_path, resources_dir, "group_a", False)
         assert result == [(group_a, "group_a")]
 
     def test_auto_scope_delegates_to_auto_scope_resource_dirs(
-        self, app_context: AppContext, tmp_path: Path
+        self, tmp_path: Path, resources_dir: Path
     ) -> None:
         group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
         _write_manifest_dir(tmp_path, "resources", "group_b")
-        _init_git_repo(app_context, tmp_path)
+        _init_git_repo(tmp_path)
         (group_a / "manifest.yml").write_text(
             textwrap.dedent(_VALID_MANIFEST) + "\n# changed\n"
         )
 
-        result = resolve_resource_dirs(app_context, None, True)
+        result = resolve_resource_dirs(tmp_path, resources_dir, None, True)
 
         assert result == [(group_a, "group_a")]

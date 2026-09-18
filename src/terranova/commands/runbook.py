@@ -24,7 +24,7 @@ from terranova.exceptions import (
     MissingRunbookError,
 )
 from terranova.process import ErrorReturnCode
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
 @click.command("runbook")
@@ -37,25 +37,30 @@ def runbook(ctx: AppContext, path: str, name: str) -> None:
     full_path = ctx.resources_dir.joinpath(path)
 
     # Ensure manifest exists and can be read
-    manifest = read_manifest(ctx, full_path)
+    manifest = read_manifest(full_path)
 
     # Extract runbook
     matching_runbooks = (
         [rb for rb in manifest.runbooks if rb.name == name] if manifest.runbooks else []
     )
     if not matching_runbooks:
-        ctx.log.fatal("execute runbook", MissingRunbookError(name))
+        log.fatal("execute runbook", MissingRunbookError(name))
     if len(matching_runbooks) > 1:
-        ctx.log.fatal("execute runbook", AmbiguousRunbookError(name))
+        log.fatal("execute runbook", AmbiguousRunbookError(name))
 
     # Import vars
-    import_vars = extract_import_vars(ctx, manifest)
+    import_vars = extract_import_vars(
+        manifest,
+        ctx.resources_dir,
+        ctx.terraform_shared_plugin_cache_dir,
+        ctx.verbose,
+    )
 
     # Execute runbook
     executable_runbook = next(iter(matching_runbooks))
     try:
-        executable_runbook.exec(ctx, path, full_path / "runbooks", import_vars)
+        executable_runbook.exec(ctx.conf_dir, path, full_path / "runbooks", import_vars)
     except MissingRunbookEnvError as err:
-        ctx.log.fatal("find environment variable", err)
+        log.fatal("find environment variable", err)
     except ErrorReturnCode as err:
         raise Exit(code=err.exit_code) from err

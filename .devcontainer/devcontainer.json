@@ -35,7 +35,12 @@
     "source=${localWorkspaceFolder}/.devcontainer,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.devcontainer,type=bind,readonly",
     "source=${localWorkspaceFolder}/.claude,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.claude,type=bind,readonly",
     "source=${localWorkspaceFolder}/.git/hooks,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.git/hooks,type=bind,readonly",
-    "source=${localWorkspaceFolder}/.git/config,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.git/config,type=bind,readonly"
+    "source=${localWorkspaceFolder}/.git/config,target=${localEnv:CONTAINER_WORKSPACE:/workspace}/.git/config,type=bind,readonly",
+    // Host sessions and memory for this project. memory/ is read-only on top: the host loads it
+    // into its own sessions automatically, so the sandbox must not be able to write to it.
+    // Order matters: the read-only mount must come after the read-write one.
+    "source=${localEnv:CLAUDE_PROJECT_DIR},target=/home/vscode/.claude/projects/${localEnv:CLAUDE_PROJECT_KEY},type=bind",
+    "source=${localEnv:CLAUDE_PROJECT_DIR}/memory,target=/home/vscode/.claude/projects/${localEnv:CLAUDE_PROJECT_KEY}/memory,type=bind,readonly"
   ],
   "remoteEnv": {
     "UV_CACHE_DIR": "/home/vscode/.cache/uv",

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Final, NoReturn, dataclass_transform, override
 
 from click.exceptions import Exit
-from rich.console import Console
+from rich.console import Console, RenderableType
 from serde import disabled, field
 from serde import serde as inner_serde
 
@@ -54,6 +54,11 @@ class Constants:
 class Log(ABC):
     """Interface for logging an action/success/failure using a common pattern."""
 
+    @property
+    @abstractmethod
+    def console(self) -> Console:
+        """Console used for standard output (e.g. to host a live display)."""
+
     @abstractmethod
     def action(self, msg: object) -> None:
         """Log an action."""
@@ -66,6 +71,10 @@ class Log(ABC):
     def failure(self, msgs: str | list[str], err: Exception | None = None) -> None:
         """Log a failure."""
 
+    @abstractmethod
+    def render(self, renderable: RenderableType, err: bool = False) -> None:
+        """Render any `rich` component (table, panel, text...)."""
+
     def fatal(
         self, msgs: str | list[str], err: Exception | None = None, raise_exit: int = 1
     ) -> NoReturn:
@@ -77,11 +86,21 @@ class Log(ABC):
 class ConsoleLog(Log):
     """`Log` implementation backed by a pair of `rich` consoles."""
 
-    def __init__(self, console: Console, err_console: Console, debug: bool) -> None:
+    def __init__(self, debug: bool = False) -> None:
         """Init console log."""
-        self.__console = console
-        self.__err_console = err_console
+        self.__console = Console()
+        self.__err_console = Console(stderr=True)
         self.__debug = debug
+
+    def configure(self, debug: bool) -> None:
+        """Set debug mode (prints tracebacks on failure)."""
+        self.__debug = debug
+
+    @property
+    @override
+    def console(self) -> Console:
+        """Console used for standard output."""
+        return self.__console
 
     @override
     def action(self, msg: object) -> None:
@@ -92,6 +111,14 @@ class ConsoleLog(Log):
     def success(self, msg: object) -> None:
         """Log a success."""
         self.__console.print(f"[green]✓[/green] Succeeded to {msg}")
+
+    @override
+    def render(self, renderable: RenderableType, err: bool = False) -> None:
+        """Render any `rich` component to stdout (or stderr if `err`)."""
+        if err:
+            self.__err_console.print(renderable)
+        else:
+            self.__console.print(renderable)
 
     @override
     def failure(self, msgs: str | list[str], err: Exception | None = None) -> None:
@@ -118,28 +145,15 @@ class ConsoleLog(Log):
 
 @dataclass(frozen=True)
 class AppContext:
-    """Per-invocation application context, attached to the Click context as `ctx.obj`."""
+    """
+    Immutable per-invocation application context, attached to the Click context as `ctx.obj`.
 
-    console: Console
-    err_console: Console
-    debug: bool
-    verbose: bool
+    Only Click command handlers read it; everything below them receives
+    explicit arguments (paths, flags).
+    """
+
     conf_dir: Path
-    log: Log
-
-    @staticmethod
-    def create(debug: bool, verbose: bool, conf_dir: Path) -> "AppContext":
-        """Build a fresh application context."""
-        console = Console()
-        err_console = Console(stderr=True)
-        return AppContext(
-            console=console,
-            err_console=err_console,
-            debug=debug,
-            verbose=verbose,
-            conf_dir=conf_dir,
-            log=ConsoleLog(console, err_console, debug),
-        )
+    verbose: bool = False
 
     @property
     def resources_dir(self) -> Path:
@@ -165,3 +179,6 @@ class AppContext:
     def terraform_shared_plugin_cache_dir(self) -> Path:
         """Returns terraform shared plugin cache directory path."""
         return self.terraform_shared_dir / "plugin-cache"
+
+
+log: Final[ConsoleLog] = ConsoleLog()

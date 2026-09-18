@@ -24,26 +24,28 @@ from click.exceptions import Exit
 
 from terranova.binds import TerraformChangeError
 from terranova.commands.helpers import (
+    TerraformTask,
     auto_scope_option,
     execute_tasks,
-    mount_context,
     read_manifests_and_waves,
     resolve_resource_dirs,
     write_execution_plan,
 )
 from terranova.executor import ResourceGroupResult, ResourceGroupTask
 from terranova.resources import ResourcesManifest
-from terranova.utils import AppContext, Constants
+from terranova.utils import AppContext, Constants, log
 
 
-class _PlanTask(ResourceGroupTask):
+class _PlanTask(TerraformTask):
     """Generates one project's plan."""
 
     def __init__(
         self,
-        ctx: AppContext,
         full_path: Path,
         rel_path: str,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+        verbose: bool,
         manifest: ResourcesManifest | None,
         *,
         input: bool,
@@ -55,7 +57,9 @@ class _PlanTask(ResourceGroupTask):
         quiet: bool = False,
     ) -> None:
         """Init plan task."""
-        super().__init__(ctx, full_path, rel_path, quiet=quiet)
+        super().__init__(
+            full_path, rel_path, resources_dir, plugin_cache_dir, verbose, quiet=quiet
+        )
         self._manifest: ResourcesManifest | None = manifest
         self._input: bool = input
         self._no_color: bool = no_color
@@ -67,12 +71,10 @@ class _PlanTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            self.ctx.log.action(f"Generating plan: {self.rel_path}")
+            log.action(f"Generating plan: {self.rel_path}")
 
         # Mount terraform context
-        terraform = mount_context(
-            self.ctx, self.full_path, manifest=self._manifest, import_vars=True
-        )
+        terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._out:
             with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
@@ -181,19 +183,21 @@ def plan(
 ) -> None:
     """Show changes required by the current configuration."""
     # Find all resources manifests
-    paths = resolve_resource_dirs(ctx, path, auto_scope)
+    paths = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
 
     # Execution plan
     execution_plan: dict[str, str] = {}
 
     # Read every manifest once, reused for mounting and for the dependency graph
-    manifests, waves = read_manifests_and_waves(ctx, paths)
+    manifests, waves = read_manifests_and_waves(paths)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
         _PlanTask(
-            ctx,
             full_path,
             rel_path,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
             manifests[rel_path],
             input=input,
             no_color=no_color,
@@ -206,13 +210,13 @@ def plan(
         for full_path, rel_path in paths
     ]
 
-    results = execute_tasks(ctx, strategy, tasks, fail_at_end, waves, group_concurrency)
+    results = execute_tasks(strategy, tasks, fail_at_end, waves, group_concurrency)
 
     def save_plan_to_file():
         if not out:
             return
         write_execution_plan(out, execution_plan)
-        ctx.log.action(
+        log.action(
             f"Saved terranova plan to: {out}\n\n"
             + "To perform exactly these actions with terranova, run the following command to apply:\n"
             + f'    terranova apply "{out}"'

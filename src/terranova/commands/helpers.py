@@ -16,6 +16,7 @@
 #
 import json
 import os
+from abc import ABC
 from pathlib import Path
 from typing import cast, override
 
@@ -34,7 +35,7 @@ from terranova.graph import Wave, build_dependency_graph, compute_waves
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
-from terranova.utils import AppContext, Constants
+from terranova.utils import Constants, log
 
 auto_scope_option = click.option(
     "--auto-scope",
@@ -83,13 +84,12 @@ class SelectorType(click.ParamType[Selector]):
         return Selector(name=data[0], value=None if len(data) == 1 else data[1])
 
 
-def read_manifest(ctx: AppContext, path: Path) -> "ResourcesManifest":
+def read_manifest(path: Path) -> "ResourcesManifest":
     """
     Read the resources manifest if possible.
     This function handle errors by logging and exiting.
 
     Args:
-        ctx: the application context.
         path: path to manifest directory.
 
     Returns:
@@ -98,7 +98,7 @@ def read_manifest(ctx: AppContext, path: Path) -> "ResourcesManifest":
     try:
         return ResourcesManifest.from_file(path / Constants.MANIFEST_FILE_NAME)
     except ManifestError as err:
-        ctx.log.fatal("read manifest", err)
+        log.fatal("read manifest", err)
 
 
 def parse_execution_plan(text: str) -> dict[str, str]:
@@ -134,14 +134,13 @@ def write_execution_plan(out: Path, execution_plan: dict[str, str]) -> None:
 
 
 def discover_resources(
-    ctx: AppContext, path: Path, selectors: list[Selector] | None = None
+    path: Path, selectors: list[Selector] | None = None
 ) -> list[Resource]:
     """
     Discover resources in every terraform configuration files.
     This function handle errors by logging and exiting.
 
     Args:
-        ctx: the application context.
         path: path to resources directory.
         selectors: list of selectors.
 
@@ -151,53 +150,58 @@ def discover_resources(
     try:
         return ResourcesFinder.find_in_dir(path, selectors)
     except InvalidResourcesError as err:
-        ctx.log.fatal(
+        log.fatal(
             f"discover resources at `{path.as_posix()}`",
             err,
         )
 
 
 def find_all_resource_dirs(
-    ctx: AppContext, resources_dir: Path
+    resources_dir: Path, search_dir: Path | None = None
 ) -> list[tuple[Path, str]]:
     """
     Find all path where there is a resource manifest.
+
+    Args:
+        resources_dir: the resources root, relative paths are computed from it.
+        search_dir: restrict the search to this directory (defaults to
+            `resources_dir`).
 
     Returns:
         list of all path.
     """
     paths: list[tuple[Path, str]] = []
-    resources_dir_path = ctx.resources_dir.as_posix()
+    resources_dir_path = resources_dir.as_posix()
     resources_dir_prefix_len = len(resources_dir_path) + 1
-    for path, _, files in os.walk(resources_dir):
+    for path, _, files in os.walk(search_dir or resources_dir):
         for file in files:
             if os.path.basename(file) == Constants.MANIFEST_FILE_NAME:
                 paths.append((Path(path), path[resources_dir_prefix_len:]))
     return paths
 
 
-def resource_dirs(ctx: AppContext, path: str | None) -> list[tuple[Path, str]]:
+def resource_dirs(resources_dir: Path, path: str | None) -> list[tuple[Path, str]]:
     """
     List of all resource dirs to interact with.
 
     Args:
-        ctx: the application context.
+        resources_dir: the resources root.
         path: use a specific path.
 
     Returns:
         list of all resource dirs.
     """
-    resources_dir = ctx.resources_dir
-    if path:
-        resources_dir = resources_dir.joinpath(path)
-    return find_all_resource_dirs(ctx, resources_dir)
+    search_dir = resources_dir.joinpath(path) if path else resources_dir
+    return find_all_resource_dirs(resources_dir, search_dir)
 
 
 def _match_resource_dirs(
-    ctx: AppContext, all_dirs: list[tuple[Path, str]], changed_files: list[Path]
+    resources_dir: Path,
+    all_dirs: list[tuple[Path, str]],
+    changed_files: list[Path],
 ) -> list[tuple[Path, str]]:
     """Map each changed file to its nearest ancestor resource-group dir, deduped."""
-    resources_root = ctx.resources_dir.resolve()
+    resources_root = resources_dir.resolve()
     by_full_path = {
         full_path.resolve(): (full_path, rel_path) for full_path, rel_path in all_dirs
     }
@@ -216,32 +220,34 @@ def _match_resource_dirs(
     return sorted(matched.values(), key=lambda entry: entry[1])
 
 
-def auto_scope_resource_dirs(ctx: AppContext) -> list[tuple[Path, str]]:
+def auto_scope_resource_dirs(
+    conf_dir: Path, resources_dir: Path
+) -> list[tuple[Path, str]]:
     """
     Scope resource dirs to those affected by the current git diff (working
     tree and staged changes vs HEAD, including untracked files).
     This function handle errors by logging and exiting.
     """
-    # `ctx.conf_dir` is guaranteed to exist (`--conf-dir` requires it), unlike
-    # `ctx.resources_dir` (e.g. before a first `terranova init`) - using it as
+    # `conf_dir` is guaranteed to exist (`--conf-dir` requires it), unlike
+    # `resources_dir` (e.g. before a first `terranova init`) - using it as
     # `cwd` avoids a spurious `CommandNotFound` from `Popen` failing to chdir.
-    git = Git(ctx, ctx.conf_dir)
+    git = Git(conf_dir)
     try:
         root = Path(git.repo_root())
     except ErrorReturnCode:
-        ctx.log.fatal(
-            f"resolve the git repository at `{ctx.conf_dir.as_posix()}`",
-            GitRepositoryError(ctx.conf_dir),
+        log.fatal(
+            f"resolve the git repository at `{conf_dir.as_posix()}`",
+            GitRepositoryError(conf_dir),
         )
     git.cwd(root)
     changed_files = [root / rel for rel in git.changed_files()]
 
-    all_dirs = find_all_resource_dirs(ctx, ctx.resources_dir)
-    return _match_resource_dirs(ctx, all_dirs, changed_files)
+    all_dirs = find_all_resource_dirs(resources_dir)
+    return _match_resource_dirs(resources_dir, all_dirs, changed_files)
 
 
 def resolve_resource_dirs(
-    ctx: AppContext, path: str | None, auto_scope: bool
+    conf_dir: Path, resources_dir: Path, path: str | None, auto_scope: bool
 ) -> list[tuple[Path, str]]:
     """Shared `path`/`--auto-scope` resolution for `plan`, `destroy` and `docs`."""
     if auto_scope and path:
@@ -249,45 +255,100 @@ def resolve_resource_dirs(
             "`--auto-scope`/`-A` can't be combined with an explicit `path`."
         )
     if auto_scope:
-        return auto_scope_resource_dirs(ctx)
-    return resource_dirs(ctx, path)
+        return auto_scope_resource_dirs(conf_dir, resources_dir)
+    return resource_dirs(resources_dir, path)
 
 
 def mount_context(
-    ctx: AppContext,
     full_path: Path,
+    resources_dir: Path,
+    plugin_cache_dir: Path,
+    verbose: bool = False,
     manifest: ResourcesManifest | None = None,
     import_vars: bool = False,
 ) -> Terraform:
     """Mount the terraform context by importing variables if needed."""
     # Ensure manifest exists and can be read
     if not manifest:
-        manifest = read_manifest(ctx, full_path)
+        manifest = read_manifest(full_path)
 
     # Import variables
-    variables = extract_import_vars(ctx, manifest) if import_vars else None
-    return Terraform(ctx, full_path, variables)
+    variables = None
+    if import_vars:
+        variables = extract_import_vars(
+            manifest, resources_dir, plugin_cache_dir, verbose
+        )
+    return Terraform(full_path, plugin_cache_dir, variables, verbose)
 
 
-def extract_import_vars(ctx: AppContext, manifest: ResourcesManifest) -> dict[str, str]:
+class TerraformTask(ResourceGroupTask, ABC):
+    """A `ResourceGroupTask` that runs terraform against its resource group."""
+
+    def __init__(
+        self,
+        full_path: Path,
+        rel_path: str,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+        verbose: bool = False,
+        quiet: bool = False,
+    ) -> None:
+        """Init terraform task."""
+        super().__init__(full_path, rel_path, quiet=quiet)
+        self._resources_dir: Path = resources_dir
+        self._plugin_cache_dir: Path = plugin_cache_dir
+        self._verbose: bool = verbose
+
+    def mount(
+        self,
+        manifest: ResourcesManifest | None = None,
+        import_vars: bool = False,
+    ) -> Terraform:
+        """Mount the terraform context of this task's resource group."""
+        return mount_context(
+            self.full_path,
+            self._resources_dir,
+            self._plugin_cache_dir,
+            self._verbose,
+            manifest=manifest,
+            import_vars=import_vars,
+        )
+
+
+def extract_import_vars(
+    manifest: ResourcesManifest,
+    resources_dir: Path,
+    plugin_cache_dir: Path,
+    verbose: bool = False,
+) -> dict[str, str]:
     """Extract import variables from manifest."""
     variables: dict[str, str] = {}
     if manifest.imports:
         for importer in manifest.imports:
             target = importer.target if importer.target else importer.resource
             variables[target] = extract_output_var(
-                ctx, importer.source, importer.resource
+                importer.source,
+                importer.resource,
+                resources_dir,
+                plugin_cache_dir,
+                verbose,
             )
     return variables
 
 
-def extract_output_var(ctx: AppContext, path: str, name: str) -> str:
+def extract_output_var(
+    path: str,
+    name: str,
+    resources_dir: Path,
+    plugin_cache_dir: Path,
+    verbose: bool = False,
+) -> str:
     """Show output values from your root module."""
     # Construct resources path
-    full_path = ctx.resources_dir.joinpath(path)
+    full_path = resources_dir.joinpath(path)
 
     # Mount terraform context
-    terraform = mount_context(ctx, full_path)
+    terraform = mount_context(full_path, resources_dir, plugin_cache_dir, verbose)
 
     # Execute output command
     try:
@@ -297,7 +358,6 @@ def extract_output_var(ctx: AppContext, path: str, name: str) -> str:
 
 
 def execute_tasks(
-    ctx: AppContext,
     strategy: str,
     tasks: list[ResourceGroupTask],
     fail_at_end: bool,
@@ -312,7 +372,7 @@ def execute_tasks(
     and `terranova.executor.ExecutorObserver`.
     """
     if strategy == "parallel":
-        ui = ParallelProgress(ctx, total=len(tasks))
+        ui = ParallelProgress(total=len(tasks))
         executor = create_executor(
             "parallel", max_workers=group_concurrency, observer=ui
         )
@@ -334,7 +394,6 @@ def flat_wave(paths: list[tuple[Path, str]]) -> list[Wave]:
 
 
 def read_manifests_and_waves(
-    ctx: AppContext,
     paths: list[tuple[Path, str]],
 ) -> tuple[dict[str, ResourcesManifest], list[Wave]]:
     """
@@ -344,9 +403,7 @@ def read_manifests_and_waves(
     (via `mount_context(..., import_vars=True)`) and therefore need dependency
     ordering; see `flat_wave` for commands that don't.
     """
-    manifests = {
-        rel_path: read_manifest(ctx, full_path) for full_path, rel_path in paths
-    }
+    manifests = {rel_path: read_manifest(full_path) for full_path, rel_path in paths}
     graph = build_dependency_graph(paths, manifests)
     waves = compute_waves(graph)
     return manifests, waves

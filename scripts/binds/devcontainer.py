@@ -16,14 +16,17 @@
 #
 import asyncio
 import contextlib
-import json
 import os
-import re
 import signal
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
+from typing import Final
+
+from serde import SerdeError, serde
+from serde.json import from_json
 
 from scripts.utils import fatal
 from terranova.process import (
@@ -45,6 +48,21 @@ CONTAINER_INPUTS = (
 )
 
 
+@serde(rename_all="pascalcase")
+@dataclass(frozen=True)
+class _Mount:
+    destination: str
+
+
+@serde(rename_all="pascalcase")
+@dataclass(frozen=True)
+class _ContainerInfo:
+    """The subset of `docker inspect` output read here."""
+
+    mounts: list[_Mount]
+    created: datetime
+
+
 class _ResizeForwarder:
     """Process observer relaying terminal resizes to a process running attached to the terminal.
 
@@ -54,20 +72,28 @@ class _ResizeForwarder:
     resizes the container's pty itself.
     """
 
-    _INTERVAL = 0.2
+    _INTERVAL: Final[float] = 0.2
 
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
 
     def on_spawn(self, process: Process) -> None:
-        if hasattr(signal, "SIGWINCH") and sys.stdout.isatty():
+        """Start watching the terminal size, only on a POSIX interactive terminal."""
+        if sys.platform != "win32" and sys.stdout.isatty():
             self._task = asyncio.create_task(self._watch(process))
 
     def on_exit(self, process: Process) -> None:
+        """Stop watching; `process` is unused but required by `ProcessObserver`."""
+        del process
         if self._task:
             self._task.cancel()
 
     async def _watch(self, process: Process) -> None:
+        """Poll the terminal size and send SIGWINCH to `process` whenever it changes.
+
+        Ends when the process exits or the terminal is no longer readable. Each tick is
+        a couple of cheap syscalls, so it never blocks the event loop.
+        """
         size = os.get_terminal_size(sys.stdout.fileno())
         while process.returncode is None:
             await asyncio.sleep(self._INTERVAL)
@@ -78,7 +104,7 @@ class _ResizeForwarder:
             if current != size:
                 size = current
                 with contextlib.suppress(ProcessLookupError):
-                    process.send_signal(getattr(signal, "SIGWINCH"))
+                    process.send_signal(signal.SIGWINCH)
 
 
 class DevContainer(Bind):
@@ -102,13 +128,22 @@ class DevContainer(Bind):
         Command(binary).args(*args).stdout(out).exec()
         return out.getvalue()
 
+    @staticmethod
+    def _inputs_last_modified(workspace: Path) -> float:
+        """Return the latest mtime (epoch seconds) among existing `CONTAINER_INPUTS`, or 0.0."""
+        config_dir = workspace / ".devcontainer"
+        paths = [config_dir / name for name in CONTAINER_INPUTS]
+        return max(
+            (path.stat().st_mtime for path in paths if path.exists()), default=0.0
+        )
+
     def has_stale_container(
-        self, workspace: Path, container_workspace: str, docker_path: str
+        self, workspace: Path, required_mounts: list[str], docker_path: str
     ) -> bool:
         """Tell whether the workspace's container no longer matches the `.devcontainer` config.
 
         `devcontainer up` reuses an existing container as-is, so it goes stale when either the
-        workspace isn't mounted at `container_workspace` (container created before that layout) or one of
+        container lacks one of `required_mounts` (created before that layout) or one of
         `CONTAINER_INPUTS` was edited after the container was created. Any problem querying the
         container engine counts as "not stale": `up` will then surface the real error.
         """
@@ -121,34 +156,24 @@ class DevContainer(Bind):
                 "--filter",
                 f"label=devcontainer.local_folder={workspace}",
             ).split()
-            edited = max(
-                (
-                    (workspace / ".devcontainer" / name).stat().st_mtime
-                    for name in CONTAINER_INPUTS
-                    if (workspace / ".devcontainer" / name).exists()
-                ),
-                default=0.0,
-            )
+            edited = self._inputs_last_modified(workspace)
             for container_id in ids:
-                info = json.loads(self._capture(docker_path, "inspect", container_id))[
-                    0
-                ]
-                if container_workspace not in [
-                    m["Destination"] for m in info["Mounts"]
-                ]:
-                    return True
-                # RFC 3339 with nanoseconds and possibly a trailing Z; trim to what fromisoformat takes.
-                created = re.sub(r"(\.\d{6})\d*", r"\1", info["Created"]).replace(
-                    "Z", "+00:00"
+                inspected = from_json(
+                    list[_ContainerInfo],
+                    self._capture(docker_path, "inspect", container_id),
                 )
-                if edited > datetime.fromisoformat(created).timestamp():
+                info = inspected[0]
+                destinations = {m.destination for m in info.mounts}
+                if not destinations.issuperset(required_mounts):
+                    return True
+                if edited > info.created.timestamp():
                     return True
         except (
             OSError,
             CommandNotFound,
             ErrorReturnCode,
             ValueError,
-            KeyError,
+            SerdeError,
             IndexError,
         ):
             return False
@@ -239,11 +264,6 @@ class DevContainer(Bind):
                 container_workspace,
                 *env_args,
                 ids[0],
-                # Login shell so PATH gets what the devcontainer features (node, claude) add.
-                "bash",
-                "-lc",
-                'exec "$@"',
-                "bash",
                 *command,
             )
             .inherit()

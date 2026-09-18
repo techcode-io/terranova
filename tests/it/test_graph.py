@@ -8,7 +8,6 @@ import pytest
 from terranova.exceptions import CyclicImportError
 from terranova.graph import DependencyGraph, build_dependency_graph, compute_waves
 from terranova.resources import ResourcesManifest
-from terranova.utils import AppContext
 
 _MANIFEST_NO_IMPORTS: Final[str] = """
 version: "1.0"
@@ -76,12 +75,12 @@ class TestComputeWaves:
 
 
 class TestBuildDependencyGraph:
-    def test_no_imports_all_independent(self, app_context: AppContext) -> None:
+    def test_no_imports_all_independent(self, resources_dir: Path) -> None:
         dir_a, rel_a = _write_manifest_dir(
-            app_context.resources_dir, "group_a", _MANIFEST_NO_IMPORTS
+            resources_dir, "group_a", _MANIFEST_NO_IMPORTS
         )
         dir_b, rel_b = _write_manifest_dir(
-            app_context.resources_dir, "group_b", _MANIFEST_NO_IMPORTS
+            resources_dir, "group_b", _MANIFEST_NO_IMPORTS
         )
         paths = [(dir_a, rel_a), (dir_b, rel_b)]
         manifests = {
@@ -93,12 +92,12 @@ class TestBuildDependencyGraph:
         assert graph.depends_on == {"group_a": set(), "group_b": set()}
         assert compute_waves(graph) == [["group_a", "group_b"]]
 
-    def test_chain_of_imports_produces_edges(self, app_context: AppContext) -> None:
+    def test_chain_of_imports_produces_edges(self, resources_dir: Path) -> None:
         dir_producer, rel_producer = _write_manifest_dir(
-            app_context.resources_dir, "producer", _MANIFEST_NO_IMPORTS
+            resources_dir, "producer", _MANIFEST_NO_IMPORTS
         )
         dir_consumer, rel_consumer = _write_manifest_dir(
-            app_context.resources_dir,
+            resources_dir,
             "consumer",
             _manifest_with_imports("producer"),
         )
@@ -113,7 +112,7 @@ class TestBuildDependencyGraph:
         assert compute_waves(graph) == [["producer"], ["consumer"]]
 
     def test_import_from_out_of_scope_source_creates_no_edge(
-        self, app_context: AppContext
+        self, resources_dir: Path
     ) -> None:
         """
         An import source that isn't part of the current `paths` (e.g. the
@@ -122,7 +121,7 @@ class TestBuildDependencyGraph:
         dependency, not an error - there's nothing to order it against here.
         """
         dir_consumer, rel_consumer = _write_manifest_dir(
-            app_context.resources_dir,
+            resources_dir,
             "consumer",
             _manifest_with_imports("does_not_exist"),
         )

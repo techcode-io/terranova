@@ -11,7 +11,12 @@ IFS=$'\n\t'
 # Named volumes mounted under the vscode user's home are created root-owned by podman/docker on
 # first use - along with any parent directories podman has to create to reach the mount point
 # (e.g. ~/.cache itself, not just ~/.cache/uv).
-chown -R vscode:vscode /home/vscode/.cache /home/vscode/.claude /commandhistory
+chown -R vscode:vscode /home/vscode/.cache /commandhistory
+# ~/.claude/projects/<key> is a bind mount of the host's project directory (memory/ on top of it
+# is read-only), so recursing into it would fail and chown host files. Only the projects/ directory
+# itself, which podman creates root-owned to reach the mount point, is fixed.
+find /home/vscode/.claude -path /home/vscode/.claude/projects -prune -o -exec chown vscode:vscode {} +
+chown vscode:vscode /home/vscode/.claude/projects
 
 echo "Applying egress firewall rules..."
 

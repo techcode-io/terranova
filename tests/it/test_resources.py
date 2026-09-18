@@ -25,7 +25,6 @@ from terranova.resources import (
     ResourcesRunbookEnv,
     Selector,
 )
-from terranova.utils import AppContext
 
 
 def _write_manifest(path: Path, content: str) -> Path:
@@ -241,7 +240,6 @@ class TestResourcesRunbookExec:
 
     def test_env_literal_value_takes_precedence(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -253,12 +251,11 @@ class TestResourcesRunbookExec:
             entrypoint=entrypoint,
             env=[ResourcesRunbookEnv(name="X", value="literal")],
         )
-        runbook.exec(app_context, "path", tmp_path, {"X": "from_import"})
+        runbook.exec(tmp_path, "path", tmp_path, {"X": "from_import"})
         assert "X=literal" in capsys.readouterr().out
 
     def test_env_resolved_from_import_vars_over_os_environ(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -268,12 +265,11 @@ class TestResourcesRunbookExec:
         runbook = ResourcesRunbook(
             name="rb", entrypoint=entrypoint, env=[ResourcesRunbookEnv(name="X")]
         )
-        runbook.exec(app_context, "path", tmp_path, {"X": "import_val"})
+        runbook.exec(tmp_path, "path", tmp_path, {"X": "import_val"})
         assert "X=import_val" in capsys.readouterr().out
 
     def test_env_resolved_from_os_environ_when_not_in_import_vars(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -283,12 +279,10 @@ class TestResourcesRunbookExec:
         runbook = ResourcesRunbook(
             name="rb", entrypoint=entrypoint, env=[ResourcesRunbookEnv(name="X")]
         )
-        runbook.exec(app_context, "path", tmp_path, {})
+        runbook.exec(tmp_path, "path", tmp_path, {})
         assert "X=env_val" in capsys.readouterr().out
 
-    def test_missing_env_without_is_defined_raises(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_missing_env_without_is_defined_raises(self, tmp_path: Path) -> None:
         entrypoint = _write_entrypoint(tmp_path, "true")
         runbook = ResourcesRunbook(
             name="rb",
@@ -296,11 +290,9 @@ class TestResourcesRunbookExec:
             env=[ResourcesRunbookEnv(name="MISSING")],
         )
         with pytest.raises(MissingRunbookEnvError):
-            runbook.exec(app_context, "path", tmp_path, {})
+            runbook.exec(tmp_path, "path", tmp_path, {})
 
-    def test_missing_env_with_wrong_if_value_raises(
-        self, app_context: AppContext, tmp_path: Path
-    ) -> None:
+    def test_missing_env_with_wrong_if_value_raises(self, tmp_path: Path) -> None:
         entrypoint = _write_entrypoint(tmp_path, "true")
         runbook = ResourcesRunbook(
             name="rb",
@@ -308,11 +300,10 @@ class TestResourcesRunbookExec:
             env=[ResourcesRunbookEnv(name="MISSING", with_if="something_else")],
         )
         with pytest.raises(MissingRunbookEnvError):
-            runbook.exec(app_context, "path", tmp_path, {})
+            runbook.exec(tmp_path, "path", tmp_path, {})
 
     def test_missing_env_with_is_defined_is_skipped(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -322,12 +313,11 @@ class TestResourcesRunbookExec:
             entrypoint=entrypoint,
             env=[ResourcesRunbookEnv(name="MISSING", with_if="is_defined")],
         )
-        runbook.exec(app_context, "path", tmp_path, {})
+        runbook.exec(tmp_path, "path", tmp_path, {})
         assert "MISSING=[]" in capsys.readouterr().out
 
     def test_terranova_env_vars_always_injected(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -336,14 +326,13 @@ class TestResourcesRunbookExec:
             'echo "PATH_VAR=$TERRANOVA_PATH"\necho "RUNBOOK_NAME=$TERRANOVA_RUNBOOK_NAME"',
         )
         runbook = ResourcesRunbook(name="my_runbook", entrypoint=entrypoint)
-        runbook.exec(app_context, "the_path", tmp_path, {})
+        runbook.exec(tmp_path, "the_path", tmp_path, {})
         out = capsys.readouterr().out
         assert "PATH_VAR=the_path" in out
         assert "RUNBOOK_NAME=my_runbook" in out
 
     def test_workdir_joins_relative_to_runbooks_dir(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -351,12 +340,11 @@ class TestResourcesRunbookExec:
         subdir.mkdir()
         entrypoint = _write_entrypoint(tmp_path, "pwd")
         runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint, workdir="subdir")
-        runbook.exec(app_context, "path", tmp_path, {})
+        runbook.exec(tmp_path, "path", tmp_path, {})
         assert str(subdir) in capsys.readouterr().out
 
     def test_args_passed_to_entrypoint(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -364,12 +352,11 @@ class TestResourcesRunbookExec:
         runbook = ResourcesRunbook(
             name="rb", entrypoint=entrypoint, args=["foo", "bar"]
         )
-        runbook.exec(app_context, "path", tmp_path, {})
+        runbook.exec(tmp_path, "path", tmp_path, {})
         assert "ARGS=foo bar" in capsys.readouterr().out
 
     def test_path_not_forwarded_when_unset(
         self,
-        app_context: AppContext,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
@@ -385,7 +372,7 @@ class TestResourcesRunbookExec:
         runbook = ResourcesRunbook(
             name="rb", entrypoint=sys.executable, args=[str(script)]
         )
-        runbook.exec(app_context, "path", tmp_path, {})
+        runbook.exec(tmp_path, "path", tmp_path, {})
         assert "PATH_IS=None" in capsys.readouterr().out
 
 

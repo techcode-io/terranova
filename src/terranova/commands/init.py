@@ -21,7 +21,7 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import mount_context, read_manifest, resource_dirs
 from terranova.process import ErrorReturnCode
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
 @click.command("init")
@@ -62,17 +62,17 @@ def init(
 ) -> None:
     """Init resources manifest."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resource_dirs(ctx.resources_dir, path)
 
     # Store errors if fail_at_end
     errors = False
 
     # Init all paths
     for full_path, rel_path in paths:
-        ctx.log.action(f"Initializing: {rel_path}")
+        log.action(f"Initializing: {rel_path}")
 
         # Ensure manifest exists and can be read
-        manifest = read_manifest(ctx, full_path)
+        manifest = read_manifest(full_path)
 
         # Remove all symbolic links
         symbolic_links = [file for file in full_path.iterdir() if file.is_symlink()]
@@ -119,11 +119,17 @@ def init(
                 ):
                     dir_path.rmdir()
             except OSError:
-                ctx.log.fatal(f"delete the directory at: {dir_path.as_posix()}")
+                log.fatal(f"delete the directory at: {dir_path.as_posix()}")
 
         try:
             # Mount terraform context
-            terraform = mount_context(ctx, full_path, manifest)
+            terraform = mount_context(
+                full_path,
+                ctx.resources_dir,
+                ctx.terraform_shared_plugin_cache_dir,
+                ctx.verbose,
+                manifest=manifest,
+            )
             terraform.init(
                 backend_config={"key": os.path.relpath(full_path, ctx.resources_dir)},
                 migrate_state=migrate_state,

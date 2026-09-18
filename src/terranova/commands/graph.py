@@ -38,7 +38,12 @@ def graph(ctx: AppContext, path: str) -> None:
     full_path = ctx.resources_dir.joinpath(path)
 
     # Mount terraform context
-    terraform = mount_context(ctx, full_path)
+    terraform = mount_context(
+        full_path,
+        ctx.resources_dir,
+        ctx.terraform_shared_plugin_cache_dir,
+        ctx.verbose,
+    )
 
     # Execute destroy command
     try:

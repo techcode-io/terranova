@@ -23,7 +23,7 @@ from typing import Final, cast, override
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
 from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
-from terranova.utils import AppContext, int_or_default, str_or_none
+from terranova.utils import int_or_default, log, str_or_none
 
 _DIAGNOSTIC_RULE: Final[str] = "─" * 60
 _MAX_FALLBACK_DIAGNOSTIC_LENGTH: Final[int] = 4000
@@ -294,24 +294,26 @@ class Terraform(Bind):
 
     def __init__(
         self,
-        ctx: AppContext,
         work_dir: Path,
+        plugin_cache_dir: Path,
         variables: dict[str, str] | None = None,
+        verbose: bool = False,
     ) -> None:
         """Init terraform bind."""
-        self.__ctx = ctx
         self.__work_dir = work_dir
+        self.__plugin_cache_dir = plugin_cache_dir
         self.__variables = variables
+        self.__verbose = verbose
 
         try:
             super().__init__("terraform")
         except CommandNotFound as err:
-            ctx.log.fatal("detect terraform binary", err)
+            log.fatal("detect terraform binary", err)
 
         try:
-            ctx.terraform_shared_plugin_cache_dir.mkdir(parents=True, exist_ok=True)
+            plugin_cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as err:
-            ctx.log.fatal("create terraform cache directory", err)
+            log.fatal("create terraform cache directory", err)
 
     @override
     def create(self, cmd_path: str | Path) -> Command:
@@ -346,11 +348,11 @@ class Terraform(Bind):
 
         # Bind plugin cache dir
         additional_env_vars["TF_PLUGIN_CACHE_DIR"] = (
-            self.__ctx.terraform_shared_plugin_cache_dir.absolute().as_posix()
+            self.__plugin_cache_dir.absolute().as_posix()
         )
 
         # Enable debug
-        if self.__ctx.verbose:
+        if self.__verbose:
             additional_env_vars["TF_LOG"] = "DEBUG"
 
         return (
@@ -424,7 +426,7 @@ class Terraform(Bind):
         suppresses the noise of a routine, successful run.
         """
         if not quiet or summary.has_errors:
-            self.__ctx.console.print(summary.render(rel_path))
+            log.render(summary.render(rel_path))
 
     def plan(
         self,
@@ -552,12 +554,12 @@ class Terraform(Bind):
 class Git(Bind):
     """Represents a bind to git command."""
 
-    def __init__(self, ctx: AppContext, work_dir: Path) -> None:
+    def __init__(self, work_dir: Path) -> None:
         """Init git bind."""
         try:
             super().__init__("git")
         except CommandNotFound as err:
-            ctx.log.fatal("detect git binary", err)
+            log.fatal("detect git binary", err)
         self.cwd(work_dir)
 
     def repo_root(self) -> str:

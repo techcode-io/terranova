@@ -22,7 +22,7 @@ from typing import Self
 
 from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn
 
-from terranova.utils import AppContext
+from terranova.utils import log
 
 
 class ParallelProgress:
@@ -38,12 +38,12 @@ class ParallelProgress:
     one line per project.
     """
 
-    def __init__(self, ctx: AppContext, total: int) -> None:
+    def __init__(self, total: int) -> None:
         """Init the status UI for `total` resource groups."""
         self.__progress = Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
-            console=ctx.console,
+            console=log.console,
             transient=False,
         )
         self.__total = total

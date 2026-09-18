@@ -16,14 +16,14 @@ class TestIterEvents:
         assert isinstance(result, Iterator)
 
     def test_yields_one_event_per_valid_line(self) -> None:
-        text = "\n".join([_VERSION_LINE, _VERSION_LINE])
+        text = f"{_VERSION_LINE}\n{_VERSION_LINE}"
         events = list(iter_events(text))
         assert len(events) == 2
         assert all(isinstance(event, TfEvent) for event in events)
         assert all(event.type == "version" for event in events)
 
     def test_skips_malformed_lines_without_raising(self) -> None:
-        text = "\n".join(["not json", "", _VERSION_LINE, "[1, 2, 3]"])
+        text = f"not json\n\n{_VERSION_LINE}\n[1, 2, 3]"
         events = list(iter_events(text))
         assert len(events) == 1
         assert events[0].type == "version"

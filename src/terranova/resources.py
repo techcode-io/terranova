@@ -37,7 +37,7 @@ from terranova.exceptions import (
 )
 from terranova.process import Command
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
-from terranova.utils import AppContext, Constants, serde
+from terranova.utils import Constants, serde
 
 
 @serde
@@ -88,12 +88,12 @@ class ResourcesRunbook:
     env: list[ResourcesRunbookEnv] | None = None
 
     def exec(
-        self, ctx: AppContext, path: str, workdir: Path, import_vars: dict[str, str]
+        self, conf_dir: Path, path: str, workdir: Path, import_vars: dict[str, str]
     ) -> None:
         """Try to execute the runbook."""
         env = {
             "TERRANOVA_PATH": path,
-            "TERRANOVA_CONF_DIR": ctx.conf_dir.absolute().as_posix(),
+            "TERRANOVA_CONF_DIR": conf_dir.absolute().as_posix(),
             "TERRANOVA_RUNBOOK_NAME": self.name,
         }
         cmd_path = os.getenv("PATH")

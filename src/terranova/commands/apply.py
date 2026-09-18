@@ -23,10 +23,10 @@ import click
 from click.exceptions import Exit
 
 from terranova.commands.helpers import (
+    TerraformTask,
     auto_scope_option,
     auto_scope_resource_dirs,
     execute_tasks,
-    mount_context,
     parse_execution_plan,
     read_manifests_and_waves,
     resource_dirs,
@@ -34,17 +34,19 @@ from terranova.commands.helpers import (
 from terranova.exceptions import InteractiveApprovalError
 from terranova.executor import ResourceGroupTask
 from terranova.resources import ResourcesManifest
-from terranova.utils import AppContext, Constants
+from terranova.utils import AppContext, Constants, log
 
 
-class _ApplyTask(ResourceGroupTask):
+class _ApplyTask(TerraformTask):
     """Applies one project's plan."""
 
     def __init__(
         self,
-        ctx: AppContext,
         full_path: Path,
         rel_path: str,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+        verbose: bool,
         manifest: ResourcesManifest | None,
         *,
         auto_approve: bool,
@@ -53,7 +55,9 @@ class _ApplyTask(ResourceGroupTask):
         quiet: bool = False,
     ) -> None:
         """Init apply task."""
-        super().__init__(ctx, full_path, rel_path, quiet=quiet)
+        super().__init__(
+            full_path, rel_path, resources_dir, plugin_cache_dir, verbose, quiet=quiet
+        )
         self._manifest: ResourcesManifest | None = manifest
         self._auto_approve: bool = auto_approve
         self._target: str = target
@@ -62,12 +66,10 @@ class _ApplyTask(ResourceGroupTask):
     @override
     def run(self) -> None:
         if not self.quiet:
-            self.ctx.log.action(f"Applying plan: {self.rel_path}")
+            log.action(f"Applying plan: {self.rel_path}")
 
         # Mount terraform context
-        terraform = mount_context(
-            self.ctx, self.full_path, manifest=self._manifest, import_vars=True
-        )
+        terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._execution_plan:
             with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
@@ -142,7 +144,7 @@ def apply(
         )
     if auto_scope:
         execution_plan = None
-        paths = auto_scope_resource_dirs(ctx)
+        paths = auto_scope_resource_dirs(ctx.conf_dir, ctx.resources_dir)
     elif path_or_plan and path_or_plan.endswith("tnplan"):
         execution_plan = parse_execution_plan(
             Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)
@@ -155,24 +157,26 @@ def apply(
         execution_plan = None
 
         # Find all resources manifests
-        paths = resource_dirs(ctx, path_or_plan)
+        paths = resource_dirs(ctx.resources_dir, path_or_plan)
 
     # Running several `terraform apply` processes at once means none of them
     # can fall back to an interactive approval prompt - fail fast instead of
     # letting every task hit terraform's own cryptic error.
     if strategy == "parallel" and not auto_approve and execution_plan is None:
-        ctx.log.fatal("apply resources in parallel", InteractiveApprovalError())
+        log.fatal("apply resources in parallel", InteractiveApprovalError())
 
     # Read every manifest once, reused for mounting and for the dependency graph.
     # Manifests are read from disk by rel_path regardless of whether `paths` came
     # from resource_dirs() or a saved .tnplan file's own keys.
-    manifests, waves = read_manifests_and_waves(ctx, paths)
+    manifests, waves = read_manifests_and_waves(paths)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
         _ApplyTask(
-            ctx,
             full_path,
             rel_path,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
             manifests[rel_path],
             auto_approve=auto_approve,
             target=target,
@@ -182,7 +186,7 @@ def apply(
         for full_path, rel_path in paths
     ]
 
-    results = execute_tasks(ctx, strategy, tasks, fail_at_end, waves, group_concurrency)
+    results = execute_tasks(strategy, tasks, fail_at_end, waves, group_concurrency)
 
     # Report any errors if fail_at_end has been enabled
     if any(r.status == "failed" for r in results):

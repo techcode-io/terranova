@@ -23,7 +23,7 @@ from terranova.commands.helpers import (
     resolve_resource_dirs,
 )
 from terranova.process import ErrorReturnCode
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
 @click.command("destroy")
@@ -33,14 +33,20 @@ from terranova.utils import AppContext
 def destroy(ctx: AppContext, path: str | None, auto_scope: bool) -> None:
     """Destroy previously-created resources."""
     # Find all resources manifests
-    paths = resolve_resource_dirs(ctx, path, auto_scope)
+    paths = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
 
     # Format all paths
     for full_path, rel_path in paths:
-        ctx.log.action(f"Destroying resources: {rel_path}")
+        log.action(f"Destroying resources: {rel_path}")
 
         # Mount terraform context
-        terraform = mount_context(ctx, full_path, import_vars=True)
+        terraform = mount_context(
+            full_path,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
+            import_vars=True,
+        )
 
         # Execute destroy command
         try:

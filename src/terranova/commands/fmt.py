@@ -20,25 +20,26 @@ import click
 from click.exceptions import Exit
 
 from terranova.commands.helpers import (
+    TerraformTask,
     execute_tasks,
     flat_group_concurrency_option,
     flat_strategy_option,
     flat_wave,
-    mount_context,
     resource_dirs,
 )
 from terranova.executor import ResourceGroupTask
-from terranova.utils import AppContext
+from terranova.utils import AppContext, log
 
 
-class _FmtTask(ResourceGroupTask):
+class _FmtTask(TerraformTask):
     """Formats one project's configuration."""
 
     @override
     def run(self) -> None:
         if not self.quiet:
-            self.ctx.log.action(f"Formatting: {self.rel_path}")
-        terraform = mount_context(self.ctx, self.full_path)
+            log.action(f"Formatting: {self.rel_path}")
+
+        terraform = self.mount()
         terraform.fmt()
 
 
@@ -52,14 +53,21 @@ def fmt(
 ) -> None:
     """Reformat your configuration in the standard style."""
     # Find all resources manifests
-    paths = resource_dirs(ctx, path)
+    paths = resource_dirs(ctx.resources_dir, path)
     quiet = strategy == "parallel"
     tasks: list[ResourceGroupTask] = [
-        _FmtTask(ctx, full_path, rel_path, quiet=quiet) for full_path, rel_path in paths
+        _FmtTask(
+            full_path,
+            rel_path,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
+            quiet=quiet,
+        )
+        for full_path, rel_path in paths
     ]
 
     results = execute_tasks(
-        ctx,
         strategy,
         tasks,
         fail_at_end=False,

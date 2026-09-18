@@ -26,4 +26,14 @@ from terranova.utils import AppContext
 @click.pass_obj
 def output(ctx: AppContext, path: str, name: str) -> None:
     """Show output values from your root module."""
-    print(extract_output_var(ctx, path, name), end="", flush=True)
+    print(
+        extract_output_var(
+            path,
+            name,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
+        ),
+        end="",
+        flush=True,
+    )

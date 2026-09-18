@@ -39,22 +39,22 @@ def __update_file_version(file_path: Path, pattern: str, replacement: str) -> No
     """Substitute the version in a file matching a regex pattern."""
     try:
         data = file_path.read_text()
-    except Exception as err:
+    except Exception:
         print(
             f"The `{file_path.as_posix()}` can't be read",
             file=sys.stderr,
         )
-        raise err
+        raise
 
     data = re.sub(pattern, replacement, data, count=1)
     try:
         file_path.write_text(data)
-    except Exception as err:
+    except Exception:
         print(
             f"The `{file_path.as_posix()}` file can't be written",
             file=sys.stderr,
         )
-        raise err
+        raise
 
 
 def __set_version(version: str) -> None:

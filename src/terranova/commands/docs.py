@@ -52,7 +52,7 @@ def format_markdown(text: str) -> str:
 def docs(ctx: AppContext, path: str | None, auto_scope: bool, docs_dir: Path) -> None:
     """Generate documentation for all resources."""
     # Find all resources manifests
-    paths = resolve_resource_dirs(ctx, path, auto_scope)
+    paths = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
     jobs: list[tuple[Path, Path]] = [
         (full_path, docs_dir.joinpath(rel_path)) for full_path, rel_path in paths
     ]
@@ -69,8 +69,8 @@ def docs(ctx: AppContext, path: str | None, auto_scope: bool, docs_dir: Path) ->
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Read resources manifest and find all resources
-        manifest = read_manifest(ctx, resources_path)
-        resources = discover_resources(ctx, resources_path)
+        manifest = read_manifest(resources_path)
+        resources = discover_resources(resources_path)
 
         # Write documentation file
         rendering = tmpl.render({"manifest": manifest, "resources": resources})
