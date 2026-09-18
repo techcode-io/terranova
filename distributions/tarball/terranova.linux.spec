@@ -5,7 +5,7 @@ a = Analysis(
     ['bin/terranova'],
     pathex=[],
     binaries=[],
-    datas=[('src/terranova/schemas', 'terranova/schemas'), ('src/terranova/templates', 'terranova/templates')],
+    datas=[('src/terranova/templates', 'terranova/templates')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

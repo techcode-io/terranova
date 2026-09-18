@@ -25,10 +25,7 @@ DISTRIBUTIONS_TARBALL_PATH: Final[Path] = Path("distributions") / "tarball"
 
 def run() -> None:
     """Generate PyInstaller configuration with included data files."""
-    add_data = (
-        ("src/terranova/schemas/", "terranova/schemas/"),
-        ("src/terranova/templates/", "terranova/templates/"),
-    )
+    add_data = (("src/terranova/templates/", "terranova/templates/"),)
     for system in ("macOS", "linux"):
         PyInstaller().generate(add_data=add_data)
         SPEC_PATH.rename(DISTRIBUTIONS_TARBALL_PATH / f"terranova.{system}.spec")
