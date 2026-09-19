@@ -17,6 +17,7 @@
 import hashlib
 import io
 import json
+import platform
 import time
 import zipfile
 from collections.abc import Callable
@@ -39,6 +40,9 @@ WINDOWS = EnginePlatform("windows", "amd64")
 
 
 class _Response:
+    status: int
+    data: bytes
+
     def __init__(self, status: int, data: bytes = b"") -> None:
         self.status = status
         self.data = data
@@ -46,6 +50,8 @@ class _Response:
 
 class FakeHttp:
     """Replaces `urllib3.PoolManager.request`, recording requested URLs."""
+
+    handler: Callable[[str], _Response]
 
     def __init__(self, handler: Callable[[str], _Response]) -> None:
         self.calls: list[str] = []
@@ -92,17 +98,16 @@ def cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def linux(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(engines.platform, "system", lambda: "Linux")
-    monkeypatch.setattr(engines.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
 
 
 def _serve(monkeypatch: pytest.MonkeyPatch, http: FakeHttp) -> None:
     # A plain function on the class, so it receives the pool as `self` like the real method
-    monkeypatch.setattr(
-        urllib3.PoolManager,
-        "request",
-        lambda _pool, method, url: http.request(method, url),
-    )
+    def request(_pool: urllib3.PoolManager, method: str, url: str) -> _Response:
+        return http.request(method, url)
+
+    monkeypatch.setattr(urllib3.PoolManager, "request", request)
 
 
 def _manifest(version: str | None) -> ResourcesManifest:
@@ -186,14 +191,14 @@ def test_invalid_archive(cache_dir: Path, monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.usefixtures("cache_dir")
 def test_unsupported_platform(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(engines.platform, "system", lambda: "Plan9")
+    monkeypatch.setattr(platform, "system", lambda: "Plan9")
     with pytest.raises(UnsupportedEnginePlatformError):
         EngineManager().resolve(ResourcesEngine("terraform", "1.9.5"))
 
 
 def test_windows_uses_exe(cache_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(engines.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(engines.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(platform, "machine", lambda: "AMD64")
     _serve(monkeypatch, _release(WINDOWS))
     binary = EngineManager().resolve(ResourcesEngine("terraform", "1.9.5"))
     assert binary is not None
@@ -202,8 +207,8 @@ def test_windows_uses_exe(cache_dir: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_detect_platform_windows(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(engines.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(engines.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(platform, "machine", lambda: "AMD64")
     assert engines.detect_platform() == WINDOWS
 
 

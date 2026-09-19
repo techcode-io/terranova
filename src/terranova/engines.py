@@ -256,7 +256,7 @@ class EngineManager:
             raise EngineDownloadError(version, str(err)) from err
         if response.status != 200:
             raise EngineDownloadError(version, f"HTTP {response.status} for {url}")
-        return cast("bytes", response.data)
+        return response.data
 
     def __download_verified(self, version: str, target: EnginePlatform) -> bytes:
         """Download the release archive and check it against the published SHA-256."""
