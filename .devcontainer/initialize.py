@@ -39,6 +39,8 @@ INHERITED_SETTINGS = (
     "alwaysThinkingEnabled",
     "attribution",
     "includeCoAuthoredBy",
+    "autoConnectIde",
+    "remoteControlAtStartup",
 )
 
 # Git settings to inherit: identity and harmless preferences. Everything else stays on the host -

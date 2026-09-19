@@ -117,7 +117,7 @@ async def claude() -> None:
 
     # Set terminal
     _reset_terminal()
-    _set_terminal_title(f"claude sandbox · {workspace.name}")
+    _set_terminal_title(f"Claude Sandbox · {workspace.name}")
 
     # Start the IDE relay
     relay = await _start_ide_relay(workspace)
@@ -134,6 +134,8 @@ async def claude() -> None:
             relay.server.close()
             relay.server.close_clients()
             await relay.server.wait_closed()
+        print("Stopping the sandbox container.")
+        devcontainer.stop(workspace, engine)
 
 
 def _claude_config_dir() -> Path:

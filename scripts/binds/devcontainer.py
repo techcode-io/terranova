@@ -270,3 +270,21 @@ class DevContainer(Bind):
             .add_observer(_ResizeForwarder())
             .aexec()
         )
+
+    def stop(self, workspace: Path, docker_path: str) -> None:
+        """Stop the workspace's running devcontainer, keeping it (and its volumes) for next time.
+
+        Best-effort: this runs on the way out of a session, so a failure is reported, not raised.
+        """
+        try:
+            ids = self._capture(
+                docker_path,
+                "ps",
+                "--quiet",
+                "--filter",
+                f"label=devcontainer.local_folder={workspace}",
+            ).split()
+            if ids:
+                Command(docker_path).args("stop", *ids).exec()
+        except (OSError, CommandNotFound, ErrorReturnCode) as err:
+            print(f"Failed to stop the sandbox container: {err}", file=sys.stderr)
