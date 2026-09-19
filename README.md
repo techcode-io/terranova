@@ -230,6 +230,26 @@ imports:
     as: "<working_directory>" # Optional: Name of the input variable to map to.
 ```
 
+### How to pin the terraform version.
+
+- By default, `terraform` is looked up on the `PATH`.
+- It's possible to pin the version per resource group in the manifest.
+- An exact version is downloaded from `releases.hashicorp.com`, verified against the published SHA-256 checksums and cached in `~/.terranova/engines/terraform/<version>/`.
+- `latest` is looked up on HashiCorp's checkpoint API at most once every 24 hours (the answer is kept in `~/.terranova/engines/terraform/.latest.json`), so runs stay consistent and keep working offline with a previously installed version.
+- With `plan` and `apply`, distinct versions are downloaded in parallel before any resource group runs.
+
+```yaml
+# Supported since 1.4 manifest version.
+---
+version: "1.4"
+engine:
+  name: terraform # Only `terraform` is supported.
+  version: "1.9.5" # Exact version, `latest` for the newest stable one, or `system` to use the `PATH` lookup.
+```
+
+- Downloads are available for Linux, macOS and Windows (amd64 and arm64).
+- Runbooks of that resource group also get the pinned binary first on their `PATH`. Without an `engine` block, or with `system`, they keep the system `PATH`.
+
 ### How to run commands across resource groups in parallel.
 
 - By default, `terranova` runs with `--strategy sequential`: one resource group after another.

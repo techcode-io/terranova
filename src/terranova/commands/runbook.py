@@ -18,8 +18,10 @@ import click
 from click.exceptions import Exit
 
 from terranova.commands.helpers import extract_import_vars, read_manifest
+from terranova.engines import default_engine_manager
 from terranova.exceptions import (
     AmbiguousRunbookError,
+    EngineError,
     MissingRunbookEnvError,
     MissingRunbookError,
 )
@@ -56,10 +58,22 @@ def runbook(ctx: AppContext, path: str, name: str) -> None:
         ctx.verbose,
     )
 
+    # Resolve the pinned engine so runbooks see the same terraform as the group
+    try:
+        binary = default_engine_manager().resolve(manifest.engine)
+    except EngineError as err:
+        log.fatal("resolve terraform engine", err)
+
     # Execute runbook
     executable_runbook = next(iter(matching_runbooks))
     try:
-        executable_runbook.exec(ctx.conf_dir, path, full_path / "runbooks", import_vars)
+        executable_runbook.exec(
+            ctx.conf_dir,
+            path,
+            full_path / "runbooks",
+            import_vars,
+            engine_dir=binary.parent if binary else None,
+        )
     except MissingRunbookEnvError as err:
         log.fatal("find environment variable", err)
     except ErrorReturnCode as err:

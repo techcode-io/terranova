@@ -25,7 +25,9 @@ from click import Parameter
 from click.exceptions import Exit
 
 from terranova.binds import Git, Terraform
+from terranova.engines import default_engine_manager
 from terranova.exceptions import (
+    EngineError,
     GitRepositoryError,
     InvalidResourcesError,
     ManifestError,
@@ -278,7 +280,12 @@ def mount_context(
         variables = extract_import_vars(
             manifest, resources_dir, plugin_cache_dir, verbose
         )
-    return Terraform(full_path, plugin_cache_dir, variables, verbose)
+    # Cache hit when `EngineManager.prepare` already ran (plan/apply), so no download here
+    try:
+        binary = default_engine_manager().resolve(manifest.engine)
+    except EngineError as err:
+        log.fatal("resolve terraform engine", err)
+    return Terraform(full_path, plugin_cache_dir, variables, verbose, binary)
 
 
 class TerraformTask(ResourceGroupTask, ABC):
@@ -404,6 +411,12 @@ def read_manifests_and_waves(
     ordering; see `flat_wave` for commands that don't.
     """
     manifests = {rel_path: read_manifest(full_path) for full_path, rel_path in paths}
+
+    # Download pinned engines before the executor phase, so tasks never race on it
+    try:
+        default_engine_manager().prepare(manifests.values())
+    except EngineError as err:
+        log.fatal("prepare terraform engines", err)
     graph = build_dependency_graph(paths, manifests)
     waves = compute_waves(graph)
     return manifests, waves

@@ -316,6 +316,31 @@ class TestResourcesRunbookExec:
         runbook.exec(tmp_path, "path", tmp_path, {})
         assert "MISSING=[]" in capsys.readouterr().out
 
+    def test_engine_dir_is_first_on_path(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("PATH", "/usr/bin:/bin")
+        entrypoint = _write_entrypoint(tmp_path, 'echo "PATH=$PATH"')
+        runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint)
+        engine_dir = tmp_path / "engine"
+        runbook.exec(tmp_path, "path", tmp_path, {}, engine_dir=engine_dir)
+        assert f"PATH={engine_dir.as_posix()}:/usr/bin:/bin" in capsys.readouterr().out
+
+    def test_path_is_unchanged_without_engine_dir(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("PATH", "/usr/bin:/bin")
+        entrypoint = _write_entrypoint(tmp_path, 'echo "PATH=$PATH"')
+        runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint)
+        runbook.exec(tmp_path, "path", tmp_path, {})
+        assert "PATH=/usr/bin:/bin" in capsys.readouterr().out
+
     def test_terranova_env_vars_always_injected(
         self,
         tmp_path: Path,
