@@ -1,6 +1,6 @@
 name: "terranova"
 arch: "amd64"
-version: "0.7.3-dev"
+version: "0.8.0"
 section: "default"
 priority: "extra"
 maintainer: "Adrien Mannocci <adrien.mannocci@gmail.com>"
