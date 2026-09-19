@@ -298,15 +298,16 @@ class Terraform(Bind):
         plugin_cache_dir: Path,
         variables: dict[str, str] | None = None,
         verbose: bool = False,
+        binary: Path | None = None,
     ) -> None:
-        """Init terraform bind."""
+        """Init terraform bind, using `binary` instead of the `PATH` lookup if given."""
         self.__work_dir = work_dir
         self.__plugin_cache_dir = plugin_cache_dir
         self.__variables = variables
         self.__verbose = verbose
 
         try:
-            super().__init__("terraform")
+            super().__init__(binary or "terraform")
         except CommandNotFound as err:
             log.fatal("detect terraform binary", err)
 

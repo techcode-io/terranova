@@ -121,11 +121,33 @@ class ManifestSchemaV1_3(ManifestSchemaV1_2):
     )
 
 
+class EngineSchema(_BaseSchema):
+    """Validates a manifest's `engine` block."""
+
+    name: fields.String = fields.String(
+        required=True, validate=validate.OneOf(["terraform"])
+    )
+    version: fields.String = fields.String(
+        required=True,
+        validate=validate.Regexp(
+            r"^(system|latest|\d+\.\d+\.\d+)$",
+            error="Must be `system`, `latest` or an exact version like `1.9.5`.",
+        ),
+    )
+
+
+class ManifestSchemaV1_4(ManifestSchemaV1_3):
+    """Manifest schema version 1.4: adds the `engine` block."""
+
+    engine: fields.Nested = fields.Nested(EngineSchema)
+
+
 MANIFEST_SCHEMAS: MappingProxyType[str, type[Schema]] = MappingProxyType(
     {
         "1.0": ManifestSchemaV1_0,
         "1.1": ManifestSchemaV1_1,
         "1.2": ManifestSchemaV1_2,
         "1.3": ManifestSchemaV1_3,
+        "1.4": ManifestSchemaV1_4,
     }
 )

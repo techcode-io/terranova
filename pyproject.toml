@@ -13,6 +13,7 @@ classifiers = [
 ]
 requires-python = ">=3.13,<3.14"
 dependencies = [
+  "certifi>=2024.8.30", # MPL-2.0
   "click>=8.4.2", # BSD
   "envyaml>=1.10.211231", # MIT
   "jinja2>=3.1.6", # BSD
@@ -20,6 +21,7 @@ dependencies = [
   "mdformat>=0.7.22", # MIT
   "pyserde>=0.32.0", # MIT
   "rich>=15.0.0", # MIT
+  "urllib3>=2.2.0", # MIT
 ]
 
 [project.urls]

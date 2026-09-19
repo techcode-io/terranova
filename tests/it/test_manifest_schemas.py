@@ -8,6 +8,7 @@ from terranova.schemas.manifest import (
     ManifestSchemaV1_1,
     ManifestSchemaV1_2,
     ManifestSchemaV1_3,
+    ManifestSchemaV1_4,
 )
 
 
@@ -79,5 +80,36 @@ class TestManifestSchemas:
                         "env": [{"name": "OPTIONAL_VAR", "if": "is_defined"}],
                     }
                 ],
+            }
+        )
+
+
+@pytest.mark.parametrize("version", ["1.9.5", "system", "latest"])
+def test_v1_4_engine_version_is_valid(version: str) -> None:
+    ManifestSchemaV1_4().load(
+        {
+            "version": "1.4",
+            "metadata": {"name": "n", "description": "d"},
+            "engine": {"name": "terraform", "version": version},
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        {"name": "opentofu", "version": "1.9.5"},
+        {"name": "terraform", "version": "^1.9"},
+        {"name": "terraform"},
+    ],
+    ids=["unknown-engine", "non-exact-version", "missing-version"],
+)
+def test_v1_4_engine_invalid_raises(engine: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        ManifestSchemaV1_4().load(
+            {
+                "version": "1.4",
+                "metadata": {"name": "n", "description": "d"},
+                "engine": engine,
             }
         )

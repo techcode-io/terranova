@@ -35,7 +35,7 @@ from terranova.exceptions import (
     UnreadableManifestError,
     VersionManifestError,
 )
-from terranova.process import Command
+from terranova.process import Command, PathCmd
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
 from terranova.utils import Constants, serde
 
@@ -88,17 +88,30 @@ class ResourcesRunbook:
     env: list[ResourcesRunbookEnv] | None = None
 
     def exec(
-        self, conf_dir: Path, path: str, workdir: Path, import_vars: dict[str, str]
+        self,
+        conf_dir: Path,
+        path: str,
+        workdir: Path,
+        import_vars: dict[str, str],
+        engine_dir: Path | None = None,
     ) -> None:
-        """Try to execute the runbook."""
+        """
+        Try to execute the runbook.
+
+        `engine_dir` is the directory of the pinned engine binary, put first on
+        the runbook's `PATH` so `terraform` resolves to the manifest's version.
+        `None` keeps the system `PATH` untouched.
+        """
         env = {
             "TERRANOVA_PATH": path,
             "TERRANOVA_CONF_DIR": conf_dir.absolute().as_posix(),
             "TERRANOVA_RUNBOOK_NAME": self.name,
         }
-        cmd_path = os.getenv("PATH")
-        if cmd_path:
-            env["PATH"] = cmd_path
+        cmd_path = PathCmd.inherit()
+        if engine_dir:
+            cmd_path.add(engine_dir.as_posix())
+        if cmd_path.build():
+            env["PATH"] = cmd_path.build()
         if self.env:
             env_ctx = ChainMap(import_vars, os.environ)
             for entry in self.env:
@@ -133,6 +146,15 @@ class ResourcesImport:
 
 @serde
 @dataclass(frozen=True)
+class ResourcesEngine:
+    """Represents the engine (terraform binary) a resource group is pinned to."""
+
+    name: str
+    version: str
+
+
+@serde
+@dataclass(frozen=True)
 class ResourcesManifest:
     """Represents a resources manifest"""
 
@@ -140,6 +162,7 @@ class ResourcesManifest:
     dependencies: list[ResourcesDependency] | None = None
     runbooks: list[ResourcesRunbook] | None = None
     imports: list[ResourcesImport] | None = None
+    engine: ResourcesEngine | None = None
 
     @staticmethod
     def from_file(path: Path) -> "ResourcesManifest":
