@@ -193,6 +193,37 @@ def test_plan_auto_scope_only_processes_changed_group(
     assert "group_b" not in result.stdout
 
 
+def test_plan_auto_scope_with_out_saves_only_changed_group_and_applies_it(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    plan_bytes = b"scoped-plan-bytes"
+    fake_terraform_bin.set_out_bytes(plan_bytes)
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+    manifest = conf_dir / "resources" / "group_a" / "manifest.yml"
+    manifest.write_text(manifest.read_text() + "\n# changed\n")
+
+    out_file = tmp_path / "plan.tnplan"
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "plan", "-A", "--out", str(out_file)],
+    )
+
+    assert result.exit_code == 0
+    saved = _read_saved_plan(out_file)
+    assert list(saved) == ["group_a"]
+    assert base64.b64decode(saved["group_a"]) == plan_bytes
+
+    # The saved plan alone drives `apply`, no `--auto-scope` needed.
+    result = runner.invoke(
+        main, args=["--conf-dir", str(conf_dir), "apply", str(out_file)]
+    )
+
+    assert result.exit_code == 0
+    assert result.stdout.count("Applying plan:") == 1
+
+
 def test_plan_auto_scope_and_path_together_is_usage_error(
     runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
 ) -> None:

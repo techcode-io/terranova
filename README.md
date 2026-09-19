@@ -101,7 +101,7 @@ uv run poe claude:sandbox
 
 ## 📖 Usage
 
-### Quick install (Linux and macOS)
+### How to install (Linux and macOS)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/install.sh | sh
@@ -110,39 +110,9 @@ curl -fsSL https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/
 curl -fsSL https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/install.sh | sh -s -- --version 0.7.2
 ```
 
-The script installs the `.deb`/`.rpm` package on Linux and the tarball on macOS
-(see `contrib/install.sh --help` for `--prefix` and `--bin-dir`). Manual steps follow.
-
-### How to install on Linux
-
-Releases ship `.deb` and `.rpm` packages that install `terranova` under `/opt/terranova`
-and symlink it into `/usr/bin/terranova`.
-
-```bash
-# Debian/Ubuntu (amd64 or arm64)
-gh release download --repo techcode-io/terranova -p '*_amd64.deb' -O terranova.deb
-sudo dpkg -i terranova.deb
-
-# Fedora/RHEL (amd64 or arm64)
-gh release download --repo techcode-io/terranova -p '*.x86_64.rpm' -O terranova.rpm
-sudo rpm -i terranova.rpm
-```
-
-### How to install on macOS
-
-```bash
-# For MacOSX Apple Silicon
-gh release download --repo techcode-io/terranova -p '*-darwin-arm64.tar.gz' -O terranova.tar.gz
-
-# For MacOSX Intel
-gh release download --repo techcode-io/terranova -p '*-darwin-amd64.tar.gz' -O terranova.tar.gz
-
-# Extract and install
-mkdir -p /usr/local/opt/terranova
-tar -C /usr/local/opt/terranova -xzf terranova.tar.gz
-chmod +x /usr/local/opt/terranova/terranova
-ln -sf /usr/local/opt/terranova/terranova /usr/local/bin/terranova
-```
+The script installs the `.deb`/`.rpm` package on Linux (under `/opt/terranova`, symlinked
+into `/usr/bin/terranova`) and the tarball on macOS. See `contrib/install.sh --help` for
+`--prefix` and `--bin-dir`.
 
 ### Define an arbitrary resource layout
 
@@ -287,6 +257,32 @@ terranova apply --strategy parallel --auto-approve --fail-at-end
 - `apply --strategy parallel` requires `--auto-approve` (or applying a saved `.tnplan` file): running
   several `terraform apply` processes at once means none of them can fall back to an interactive
   approval prompt.
+
+### How to scope a run to what changed.
+
+- `plan`, `apply`, `destroy` and `docs` accept `--auto-scope` (`-A`) to only target the resource groups
+  affected by your current git changes, instead of passing an explicit `path`.
+- The changes considered are the working tree and staged changes compared to `HEAD`, plus untracked
+  files (respecting `.gitignore`).
+- Each changed file is mapped to its nearest ancestor directory containing a `manifest.yml`; a change
+  outside any resource group is ignored, and several changes in one group select it only once.
+- It can't be combined with an explicit `path` (or, for `apply`, a `.tnplan` file), and it must be run
+  from inside a git repository.
+- With `docs`, the docs directory isn't wiped first, so documentation of groups outside the scope is kept.
+
+```bash
+terranova plan --auto-scope
+terranova apply -A --auto-approve
+```
+
+- To apply exactly what was planned, combine it with `plan --out`: the saved `.tnplan` file only contains
+  the scoped resource groups, and `apply` takes its targets from that file. Don't pass `--auto-scope` to
+  `apply` in that case, it can't be combined with a plan file.
+
+```bash
+terranova plan --auto-scope --out changes.tnplan
+terranova apply changes.tnplan
+```
 
 ### How to regenerate the documentation.
 
