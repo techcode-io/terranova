@@ -53,11 +53,13 @@ CONTAINER_CLAUDE_PROJECTS: Final[str] = "/home/vscode/.claude/projects"
 
 # The IDE plugin listens on an ephemeral loopback port of the host and writes that port plus a
 # per-start auth token to `~/.claude/ide/<port>.lock`. The sandbox can reach neither. So the host
-# runs a small relay on a fixed loopback port, which the container reaches through
+# runs a small relay on a free loopback port picked by the OS, which the container reaches through
 # `host.containers.internal` (podman) or `host.docker.internal` (Docker), and which forwards to the IDE while adding the auth token itself -
 # the token never enters the container.
-# Keep the port in sync with `.devcontainer/claude.sh` and `.devcontainer/init-sandbox.sh`.
-IDE_RELAY_PORT: Final[int] = 41337
+# The port is handed over through this environment variable: `devcontainer.json` passes it to
+# `.devcontainer/init-sandbox.sh` (which opens the firewall for it) and `exec` passes it to
+# `.devcontainer/claude.sh`.
+IDE_RELAY_PORT_ENV: Final[str] = "IDE_RELAY_PORT"
 IDE_AUTH_HEADER: Final[bytes] = b"X-Claude-Code-Ide-Authorization"
 # Win32 constants for `_process_alive`.
 _PROCESS_QUERY_LIMITED_INFORMATION: Final[int] = 0x1000
@@ -83,9 +85,10 @@ class IdeLock:
 
 
 class IdeRelay(NamedTuple):
-    """A running relay: the listening server and the IDE it forwards to."""
+    """A running relay: the listening server, its port and the IDE it forwards to."""
 
     server: Server
+    port: int
     ide_lock: IdeLock
 
 
@@ -104,6 +107,39 @@ async def claude() -> None:
     )
     claude_project_mount = _share_claude_project(workspace, container_workspace)
     devcontainer = DevContainer()
+
+    # Start the IDE relay first: its port is only known once bound, and the container's firewall
+    # is configured for it while the container starts.
+    relay = await _start_ide_relay(workspace)
+    if relay:
+        os.environ[IDE_RELAY_PORT_ENV] = str(relay.port)
+    else:
+        os.environ.pop(IDE_RELAY_PORT_ENV, None)
+    try:
+        await _run_sandbox(
+            devcontainer,
+            workspace,
+            engine,
+            container_workspace,
+            claude_project_mount,
+            relay,
+        )
+    finally:
+        if relay:
+            relay.server.close()
+            relay.server.close_clients()
+            await relay.server.wait_closed()
+
+
+async def _run_sandbox(
+    devcontainer: DevContainer,
+    workspace: Path,
+    engine: str,
+    container_workspace: str,
+    claude_project_mount: str,
+    relay: IdeRelay | None,
+) -> None:
+    """Start the sandbox container, run Claude Code in it, then stop the container."""
     stale = devcontainer.has_stale_container(
         workspace, [container_workspace, claude_project_mount], engine
     )
@@ -118,22 +154,19 @@ async def claude() -> None:
     # Set terminal
     _reset_terminal()
     _set_terminal_title(f"Claude Sandbox · {workspace.name}")
-
-    # Start the IDE relay
-    relay = await _start_ide_relay(workspace)
+    if relay:
+        print(f"Bridging {relay.ide_lock.name} into the sandbox.")
 
     command = ["bash", f"{container_workspace}/.devcontainer/claude.sh"]
+    env = _terminal_env()
     if relay:
         command.append(relay.ide_lock.name)
+        env[IDE_RELAY_PORT_ENV] = str(relay.port)
     try:
         await devcontainer.exec(
-            workspace, engine, container_workspace, *command, env=_terminal_env()
+            workspace, engine, container_workspace, *command, env=env
         )
     finally:
-        if relay:
-            relay.server.close()
-            relay.server.close_clients()
-            await relay.server.wait_closed()
         print("Stopping the sandbox container.")
         devcontainer.stop(workspace, engine)
 
@@ -282,18 +315,16 @@ async def _start_ide_relay(workspace: Path) -> IdeRelay | None:
         print("No IDE with Claude Code integration found, starting without it.")
         return None
     try:
-        server = await start_server(
-            partial(_relay_ide_connection, ide), "127.0.0.1", IDE_RELAY_PORT
-        )
+        server = await start_server(partial(_relay_ide_connection, ide), "127.0.0.1", 0)
     except OSError as err:
         print(
-            f"Can't listen on 127.0.0.1:{IDE_RELAY_PORT} for the IDE relay ({err}), "
+            f"Can't listen on a loopback port for the IDE relay ({err}), "
             + "starting without IDE integration.",
             file=sys.stderr,
         )
         return None
-    print(f"Bridging {ide.name} into the sandbox.")
-    return IdeRelay(server, ide)
+    port: int = server.sockets[0].getsockname()[1]  # pyright: ignore[reportAny]
+    return IdeRelay(server, port, ide)
 
 
 async def _relay_ide_connection(

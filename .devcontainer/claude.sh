@@ -6,8 +6,8 @@
 # the regular `--ide` integration.
 set -euo pipefail
 
-# Keep in sync with IDE_RELAY_PORT in scripts/tasks/sandbox.py and the rule in init-sandbox.sh.
-relay_port=41337
+# The IDE relay port is picked by the host on each run (IDE_RELAY_PORT, see scripts/tasks/sandbox.py);
+# init-sandbox.sh opened the firewall for that same port.
 
 # The host passes its terminal's size (COLUMNS/LINES) and TERM. Apply the size to this pty, which
 # doesn't reliably start out with it, and fall back to a universal TERM if the container's terminfo
@@ -35,6 +35,7 @@ export CLAUDE_CODE_NO_FLICKER=1
 args=(--dangerously-skip-permissions)
 
 if [ -n "${1:-}" ]; then
+  relay_port="${IDE_RELAY_PORT:?IDE_RELAY_PORT must be set by the host when wiring an IDE}"
   lock_dir="$HOME/.claude/ide"
   lock="$lock_dir/$relay_port.lock"
   mkdir -p "$lock_dir"
