@@ -27,14 +27,17 @@ RUN \
 
 # Drop the base image's blanket passwordless sudo: with NET_ADMIN it would let the agent simply
 # `sudo iptables -F` its way out of the egress firewall. The only thing vscode may run as root is
-# the startup script below (no arguments allowed), which lives in the image where vscode can't
-# modify it. It re-verifies on every start that no other sudo rule slipped in (e.g. from a feature).
+# the startup script below (no arguments, or a single numeric IDE relay port, which the script only
+# honours once per container start), which lives in the image where vscode can't modify it. It
+# re-verifies on every start that no other sudo rule slipped in (e.g. from a feature).
 RUN rm -f /etc/sudoers.d/vscode; gpasswd -d vscode sudo || true
 
 COPY init-sandbox.sh /usr/local/bin/init-sandbox.sh
 RUN \
   chown root:root /usr/local/bin/init-sandbox.sh \
   && chmod 755 /usr/local/bin/init-sandbox.sh \
-  && echo 'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-sandbox.sh ""' \
+  && printf '%s\n' \
+    'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-sandbox.sh ""' \
+    'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-sandbox.sh [0-9][0-9][0-9][0-9]*' \
     > /etc/sudoers.d/sandbox \
   && chmod 440 /etc/sudoers.d/sandbox

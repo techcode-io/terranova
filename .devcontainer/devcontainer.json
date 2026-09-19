@@ -64,7 +64,8 @@
   "initializeCommand": "uv run --no-project .devcontainer/initialize.py",
   "postCreateCommand": "uv run --no-project .devcontainer/post_create.py",
   // Re-applied on every start; the script comes from the image, not the (agent-writable) workspace.
-  "postStartCommand": "sudo /usr/local/bin/init-sandbox.sh",
+  // The relay port is picked by the host on each run (see scripts/tasks/sandbox.py); unset gives no argument.
+  "postStartCommand": "sudo /usr/local/bin/init-sandbox.sh ${localEnv:IDE_RELAY_PORT}",
   "customizations": {
     "vscode": {
       "extensions": [
