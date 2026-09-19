@@ -101,6 +101,18 @@ uv run poe claude:sandbox
 
 ## 📖 Usage
 
+### Quick install (Linux and macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/install.sh | sh
+
+# Pin a version
+curl -fsSL https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/install.sh | sh -s -- --version 0.7.2
+```
+
+The script installs the `.deb`/`.rpm` package on Linux and the tarball on macOS
+(see `contrib/install.sh --help` for `--prefix` and `--bin-dir`). Manual steps follow.
+
 ### How to install on Linux
 
 Releases ship `.deb` and `.rpm` packages that install `terranova` under `/opt/terranova`
