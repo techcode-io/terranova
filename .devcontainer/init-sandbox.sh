@@ -92,12 +92,29 @@ for domain in "${DOMAINS[@]}"; do
 done
 
 # The host IDE relay (scripts/tasks/sandbox.py): one port on the host, nothing else of it. Nothing
-# listens there unless `poe claude:sandbox` started the relay. Keep the port in sync with claude.sh.
-IDE_RELAY_PORT=41337
+# listens there unless `poe claude:sandbox` started the relay. The host picks the port on each run
+# and passes it as $1 (devcontainer.json postStartCommand); none means no IDE integration.
+# vscode may run this script with a port through sudo, so only the first call after the container
+# started is honoured (the marker is keyed on PID 1's start time): the agent can't reopen the
+# firewall towards another host port later.
+IDE_RELAY_PORT="${1:-}"
+BOOT_ID="$(awk '{print $22}' /proc/1/stat)"
+RELAY_STATE=/var/lib/sandbox-relay-port
+if [ -r "$RELAY_STATE" ] && [ "$(cut -d' ' -f1 "$RELAY_STATE")" = "$BOOT_ID" ]; then
+  IDE_RELAY_PORT="$(cut -d' ' -f2 "$RELAY_STATE")"
+else
+  if [ -n "$IDE_RELAY_PORT" ] && ! [[ "$IDE_RELAY_PORT" =~ ^[0-9]+$ && "$IDE_RELAY_PORT" -ge 1024 && "$IDE_RELAY_PORT" -le 65535 ]]; then
+    echo "ERROR: invalid IDE relay port '${IDE_RELAY_PORT}'" >&2
+    exit 1
+  fi
+  echo "$BOOT_ID $IDE_RELAY_PORT" > "$RELAY_STATE"
+fi
 # The host is host.containers.internal under podman and host.docker.internal under Docker.
 HOST_IP="$(getent ahostsv4 host.containers.internal | awk 'NR==1 {print $1}' || true)"
 [ -n "$HOST_IP" ] || HOST_IP="$(getent ahostsv4 host.docker.internal | awk 'NR==1 {print $1}' || true)"
-if [ -n "$HOST_IP" ]; then
+if [ -z "$IDE_RELAY_PORT" ]; then
+  echo "No IDE relay port given, IDE integration disabled."
+elif [ -n "$HOST_IP" ]; then
   iptables -A OUTPUT -p tcp -d "$HOST_IP" --dport "$IDE_RELAY_PORT" -j ACCEPT
 else
   echo "WARNING: the host isn't resolvable from the container, IDE integration won't work" >&2

@@ -95,7 +95,7 @@ uv run poe claude:sandbox
 - Outbound network access is restricted by an egress firewall to an allowlist of hosts (package registries, VCS, Anthropic services). IPv6 is disabled.
 - The workspace is writable, but `.devcontainer`, `.claude`, `.git/hooks` and `.git/config` are mounted read-only, since they are executed on the host.
 - Claude Code auth, the `uv` cache and the shell history persist across rebuilds in named volumes.
-- If an IDE with the Claude Code plugin has the project open, its selection and diagnostics context is bridged into the sandbox through a host-side relay on `127.0.0.1:41337`. The IDE auth token never enters the container.
+- If an IDE with the Claude Code plugin has the project open, its selection and diagnostics context is bridged into the sandbox through a host-side relay on a free loopback port picked at each launch. The IDE auth token never enters the container.
 - The container is recreated automatically when `.devcontainer` changes.
 - The same `.devcontainer` can also be opened directly from VS Code.
 
