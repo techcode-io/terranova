@@ -22,3 +22,12 @@ contents:
   - src: /opt/terranova/terranova
     dst: /usr/bin/terranova
     type: symlink
+
+  - src: ./dist/terranova/completions/terranova.bash
+    dst: /usr/share/bash-completion/completions/terranova
+
+  - src: ./dist/terranova/completions/_terranova
+    dst: /usr/share/zsh/site-functions/_terranova
+
+  - src: ./dist/terranova/completions/terranova.fish
+    dst: /usr/share/fish/vendor_completions.d/terranova.fish

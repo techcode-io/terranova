@@ -21,6 +21,7 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import (
     TerraformTask,
+    complete_resource_path,
     execute_tasks,
     flat_group_concurrency_option,
     flat_strategy_option,
@@ -44,7 +45,7 @@ class _FmtTask(TerraformTask):
 
 
 @click.command("fmt")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @flat_strategy_option
 @flat_group_concurrency_option
 @click.pass_obj

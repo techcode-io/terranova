@@ -24,13 +24,13 @@ Not to be confused with `terranova.graph`, the dependency-graph module used by
 import click
 from click.exceptions import Exit
 
-from terranova.commands.helpers import mount_context
+from terranova.commands.helpers import complete_resource_path, mount_context
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext
 
 
 @click.command("graph")
-@click.argument("path", type=str)
+@click.argument("path", type=str, shell_complete=complete_resource_path)
 @click.pass_obj
 def graph(ctx: AppContext, path: str) -> None:
     """Generate a Graphviz graph of the steps in an operation."""

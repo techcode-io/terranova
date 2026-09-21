@@ -26,6 +26,7 @@ from terranova.commands.helpers import (
     TerraformTask,
     auto_scope_option,
     auto_scope_resource_dirs,
+    complete_resource_path,
     execute_tasks,
     parse_execution_plan,
     read_manifests_and_waves,
@@ -92,7 +93,9 @@ class _ApplyTask(TerraformTask):
 
 
 @click.command("apply")
-@click.argument("path_or_plan", type=str, required=False)
+@click.argument(
+    "path_or_plan", type=str, required=False, shell_complete=complete_resource_path
+)
 @auto_scope_option
 @click.option(
     "--auto-approve",

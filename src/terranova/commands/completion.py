@@ -15,25 +15,18 @@
 # limitations under the License.
 #
 import click
+from click.shell_completion import get_completion_class
 
-from terranova.commands.helpers import complete_resource_path, extract_output_var
-from terranova.utils import AppContext
+PROG_NAME = "terranova"
+COMPLETE_VAR = "_TERRANOVA_COMPLETE"
 
 
-@click.command("output")
-@click.argument("path", type=str, shell_complete=complete_resource_path)
-@click.argument("name", type=str)
-@click.pass_obj
-def output(ctx: AppContext, path: str, name: str) -> None:
-    """Show output values from your root module."""
-    print(
-        extract_output_var(
-            path,
-            name,
-            ctx.resources_dir,
-            ctx.terraform_shared_plugin_cache_dir,
-            ctx.verbose,
-        ),
-        end="",
-        flush=True,
-    )
+@click.command("completion")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+@click.pass_context
+def completion(ctx: click.Context, shell: str) -> None:
+    """Print the shell completion script for bash, zsh or fish."""
+    comp_cls = get_completion_class(shell)
+    if comp_cls is None:  # pragma: no cover - guarded by click.Choice
+        raise click.BadParameter(f"unsupported shell `{shell}`")
+    click.echo(comp_cls(ctx.find_root().command, {}, PROG_NAME, COMPLETE_VAR).source())

@@ -114,6 +114,26 @@ The script installs the `.deb`/`.rpm` package on Linux (under `/opt/terranova`, 
 into `/usr/bin/terranova`) and the tarball on macOS. See `contrib/install.sh --help` for
 `--prefix` and `--bin-dir`.
 
+### Shell completion
+
+`terranova completion <bash|zsh|fish>` prints a completion script that completes commands,
+options, resource group paths and runbook names (using `--conf-dir`/`TERRANOVA_CONF_DIR`).
+
+The Linux `.deb`/`.rpm` packages install the scripts system-wide. Otherwise, enable it manually:
+
+```bash
+# bash (~/.bashrc)
+eval "$(terranova completion bash)"
+
+# zsh (~/.zshrc)
+eval "$(terranova completion zsh)"
+
+# fish
+terranova completion fish > ~/.config/fish/completions/terranova.fish
+```
+
+The macOS tarball also ships pre-generated scripts in its `completions/` directory.
+
 ### Define an arbitrary resource layout
 
 - `terranova` rely on the concept of resource groups.

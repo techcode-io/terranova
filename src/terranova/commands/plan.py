@@ -26,6 +26,7 @@ from terranova.binds import TerraformChangeError
 from terranova.commands.helpers import (
     TerraformTask,
     auto_scope_option,
+    complete_resource_path,
     execute_tasks,
     read_manifests_and_waves,
     resolve_resource_dirs,
@@ -110,7 +111,7 @@ class _PlanTask(TerraformTask):
 
 
 @click.command("plan")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
 @click.option(
     "--input/--no-input",

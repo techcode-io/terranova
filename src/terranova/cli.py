@@ -29,6 +29,7 @@ import click
 
 from terranova import __version__
 from terranova.commands.apply import apply
+from terranova.commands.completion import completion
 from terranova.commands.define import define
 from terranova.commands.destroy import destroy
 from terranova.commands.docs import docs
@@ -58,7 +59,7 @@ from terranova.utils import AppContext, log
 @click.option(
     "--conf-dir",
     help="Conf directory path.",
-    type=click.Path(exists=True, path_type=Path),
+    type=click.Path(path_type=Path),
     required=True,
     envvar="TERRANOVA_CONF_DIR",
     default="./conf",
@@ -67,11 +68,18 @@ from terranova.utils import AppContext, log
 @click.pass_context
 def main(ctx: click.Context, debug: bool, verbose: bool, conf_dir: Path) -> None:
     """Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale."""
+    # Checked here rather than with `click.Path(exists=True)` so that
+    # `terranova completion` works without a conf dir.
+    if ctx.invoked_subcommand != "completion" and not conf_dir.exists():
+        raise click.BadParameter(
+            f"Path '{conf_dir}' does not exist.", ctx=ctx, param_hint="'--conf-dir'"
+        )
     log.configure(debug)
     ctx.obj = AppContext(conf_dir=conf_dir, verbose=verbose)
 
 
 main.add_command(apply)
+main.add_command(completion)
 main.add_command(define)
 main.add_command(destroy)
 main.add_command(docs)

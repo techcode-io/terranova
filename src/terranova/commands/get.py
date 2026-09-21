@@ -17,13 +17,18 @@
 import click
 from rich.table import Table
 
-from terranova.commands.helpers import SelectorType, discover_resources, resource_dirs
+from terranova.commands.helpers import (
+    SelectorType,
+    complete_resource_path,
+    discover_resources,
+    resource_dirs,
+)
 from terranova.resources import Selector
 from terranova.utils import AppContext, log
 
 
 @click.command("get")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @click.option(
     "--selector", "selectors", type=SelectorType(), required=False, multiple=True
 )

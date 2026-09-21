@@ -23,6 +23,7 @@ from typing import cast, override
 import click
 from click import Parameter
 from click.exceptions import Exit
+from click.shell_completion import CompletionItem
 
 from terranova.binds import Git, Terraform
 from terranova.engines import default_engine_manager
@@ -84,6 +85,45 @@ class SelectorType(click.ParamType[Selector]):
 
         data = value.split("=", maxsplit=1)
         return Selector(name=data[0], value=None if len(data) == 1 else data[1])
+
+
+def _completion_resources_dir(ctx: click.Context) -> Path:
+    """Resolve the resources dir from the root `--conf-dir` during shell completion."""
+    conf_dir = cast("Path", ctx.find_root().params["conf_dir"])
+    return conf_dir / "resources"
+
+
+def complete_resource_path(
+    ctx: click.Context, param: Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Shell completion of resource group paths, relative to the resources dir."""
+    _ = param
+    try:
+        resources_dir = _completion_resources_dir(ctx)
+        rel_paths = sorted(rel for _, rel in find_all_resource_dirs(resources_dir))
+    except OSError:
+        return []
+    return [CompletionItem(rel) for rel in rel_paths if rel.startswith(incomplete)]
+
+
+def complete_runbook_name(
+    ctx: click.Context, param: Parameter, incomplete: str
+) -> list[CompletionItem]:
+    """Shell completion of runbook names of the resource group given as `path`."""
+    _ = param
+    path = cast("str | None", ctx.params.get("path"))
+    if not path:
+        return []
+    manifest_path = _completion_resources_dir(ctx) / path / Constants.MANIFEST_FILE_NAME
+    try:
+        manifest = ResourcesManifest.from_file(manifest_path)
+    except (ManifestError, OSError):
+        return []
+    return [
+        CompletionItem(runbook.name)
+        for runbook in manifest.runbooks or []
+        if runbook.name.startswith(incomplete)
+    ]
 
 
 def read_manifest(path: Path) -> "ResourcesManifest":

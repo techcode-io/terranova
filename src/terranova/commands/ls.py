@@ -16,12 +16,12 @@
 #
 import click
 
-from terranova.commands.helpers import resource_dirs
+from terranova.commands.helpers import complete_resource_path, resource_dirs
 from terranova.utils import AppContext
 
 
 @click.command("ls")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @click.pass_obj
 def ls(ctx: AppContext, path: str | None) -> None:
     """List resources."""

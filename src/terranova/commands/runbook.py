@@ -17,7 +17,12 @@
 import click
 from click.exceptions import Exit
 
-from terranova.commands.helpers import extract_import_vars, read_manifest
+from terranova.commands.helpers import (
+    complete_resource_path,
+    complete_runbook_name,
+    extract_import_vars,
+    read_manifest,
+)
 from terranova.engines import default_engine_manager
 from terranova.exceptions import (
     AmbiguousRunbookError,
@@ -30,8 +35,8 @@ from terranova.utils import AppContext, log
 
 
 @click.command("runbook")
-@click.argument("path", type=str)
-@click.argument("name", type=str)
+@click.argument("path", type=str, shell_complete=complete_resource_path)
+@click.argument("name", type=str, shell_complete=complete_runbook_name)
 @click.pass_obj
 def runbook(ctx: AppContext, path: str, name: str) -> None:
     """Execute a runbook."""

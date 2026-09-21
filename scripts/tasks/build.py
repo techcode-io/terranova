@@ -26,6 +26,11 @@ from terranova.process import Command
 DIST_DIR: Final[Path] = (Path(__file__).parent.parent.parent / "dist").absolute()
 SPEC_PATH: Final[Path] = Path("terranova.spec")
 DISTRIBUTIONS_TARBALL_PATH: Final[Path] = Path("distributions") / "tarball"
+COMPLETION_FILES: Final[dict[str, str]] = {
+    "bash": "terranova.bash",
+    "zsh": "_terranova",
+    "fish": "terranova.fish",
+}
 
 
 def run() -> None:
@@ -51,6 +56,14 @@ def run() -> None:
 
     # Check terranova bundle is working
     Command(terranova_exec).args("--version").inherit_out().exec()
+
+    # Generate shell completion scripts from the freshly built bundle
+    completions_dir = DIST_DIR / "terranova" / "completions"
+    completions_dir.mkdir()
+    for shell, filename in COMPLETION_FILES.items():
+        Command(terranova_exec).args("completion", shell).stdout(
+            completions_dir / filename
+        ).exec()
 
     # Create a tarball for macOS
     if system == "darwin":

@@ -19,13 +19,18 @@ import os
 import click
 from click.exceptions import Exit
 
-from terranova.commands.helpers import mount_context, read_manifest, resource_dirs
+from terranova.commands.helpers import (
+    complete_resource_path,
+    mount_context,
+    read_manifest,
+    resource_dirs,
+)
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
 
 
 @click.command("init")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @click.option(
     "--migrate-state",
     help="Reconfigure a backend, and attempt to migrate any existing state.",

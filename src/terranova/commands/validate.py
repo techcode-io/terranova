@@ -20,6 +20,7 @@ import click
 
 from terranova.commands.helpers import (
     TerraformTask,
+    complete_resource_path,
     discover_resources,
     execute_tasks,
     flat_group_concurrency_option,
@@ -65,7 +66,7 @@ class _ValidateTask(TerraformTask):
 
 
 @click.command("validate")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @click.option(
     "--fail-at-end",
     help="If specified, only fail afterwards; allow all non-impacted projects to continue.",

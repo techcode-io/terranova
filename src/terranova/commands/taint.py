@@ -17,13 +17,13 @@
 import click
 from click.exceptions import Exit
 
-from terranova.commands.helpers import mount_context
+from terranova.commands.helpers import complete_resource_path, mount_context
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext
 
 
 @click.command("taint")
-@click.argument("path", type=str)
+@click.argument("path", type=str, shell_complete=complete_resource_path)
 @click.argument("address", type=str)
 @click.pass_obj
 def taint(ctx: AppContext, path: str, address: str) -> None:

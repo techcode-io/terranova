@@ -19,6 +19,7 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import (
     auto_scope_option,
+    complete_resource_path,
     mount_context,
     resolve_resource_dirs,
 )
@@ -27,7 +28,7 @@ from terranova.utils import AppContext, log
 
 
 @click.command("destroy")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
 @click.pass_obj
 def destroy(ctx: AppContext, path: str | None, auto_scope: bool) -> None:

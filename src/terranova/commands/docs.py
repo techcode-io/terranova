@@ -25,6 +25,7 @@ from jinja2 import Environment, PackageLoader
 
 from terranova.commands.helpers import (
     auto_scope_option,
+    complete_resource_path,
     discover_resources,
     read_manifest,
     resolve_resource_dirs,
@@ -39,7 +40,7 @@ def format_markdown(text: str) -> str:
 
 
 @click.command("docs")
-@click.argument("path", type=str, required=False)
+@click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
 @click.option(
     "--docs-dir",
