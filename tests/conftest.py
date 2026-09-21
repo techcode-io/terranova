@@ -65,7 +65,7 @@ sys.exit(exit_code)
 
 
 @pytest.fixture(autouse=True)
-def _reset_log() -> None:  # pyright: ignore[reportUnusedFunction]
+def _reset_log() -> None:
     """Reset the ambient `log` before every test."""
     log.configure(debug=False)
 

@@ -26,7 +26,7 @@ from terranova.binds import Git
 
 
 @pytest.fixture(autouse=True)
-def _restore_cwd() -> Iterator[None]:  # pyright: ignore[reportUnusedFunction]
+def _restore_cwd() -> Iterator[None]:
     cwd = os.getcwd()
     yield
     os.chdir(cwd)
