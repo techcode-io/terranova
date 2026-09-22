@@ -167,29 +167,29 @@ class UnsupportedEnginePlatformError(EngineError):
     def __init__(self, system: str, machine: str) -> None:
         """Init unsupported engine platform error."""
         super().__init__(
-            cause=f"No official terraform release for `{system}/{machine}`",
-            resolution="Set the engine version to `system` and install terraform manually.",
+            cause=f"No official engine release for `{system}/{machine}`",
+            resolution="Set the engine version to `system` and install it manually.",
         )
 
 
 class EngineDownloadError(EngineError):
     """Represents a failed engine download."""
 
-    def __init__(self, version: str, reason: str) -> None:
+    def __init__(self, engine_name: str, version: str, reason: str) -> None:
         """Init engine download error."""
         super().__init__(
-            cause=f"Unable to download terraform `{version}`: {reason}",
-            resolution="Check the version exists and that releases.hashicorp.com is reachable.",
+            cause=f"Unable to download {engine_name} `{version}`: {reason}",
+            resolution="Check the version exists and that the release server is reachable.",
         )
 
 
 class EngineChecksumError(EngineError):
     """Represents an engine archive whose checksum doesn't match the published one."""
 
-    def __init__(self, version: str) -> None:
+    def __init__(self, engine_name: str, version: str) -> None:
         """Init engine checksum error."""
         super().__init__(
-            cause=f"Checksum mismatch for terraform `{version}`",
+            cause=f"Checksum mismatch for {engine_name} `{version}`",
             resolution="Retry the download; if it persists, do not use this binary.",
         )
 

@@ -14,11 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-"""Download, verify and cache the terraform binary pinned by a manifest."""
+"""Download, verify and cache the terraform/opentofu binary pinned by a manifest."""
 
 import hashlib
 import io
-import json
 import os
 import platform
 import re
@@ -26,15 +25,19 @@ import shutil
 import tempfile
 import time
 import zipfile
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final, NamedTuple, cast
+from typing import Final, NamedTuple, override
 
 import certifi
 import urllib3
+from serde import SerdeError, serde
+from serde.json import from_json, to_json
 from urllib3.util import Retry, Timeout
 
 from terranova.exceptions import (
@@ -45,10 +48,18 @@ from terranova.exceptions import (
 from terranova.resources import ResourcesEngine, ResourcesManifest
 from terranova.utils import log
 
-RELEASES_URL: Final[str] = "https://releases.hashicorp.com/terraform"
+HASHICORP_RELEASES_URL: Final[str] = "https://releases.hashicorp.com/terraform"
+HASHICORP_LATEST_URL: Final[str] = (
+    "https://checkpoint-api.hashicorp.com/v1/check/terraform"
+)
+OPENTOFU_RELEASES_URL: Final[str] = (
+    "https://github.com/opentofu/opentofu/releases/download"
+)
+OPENTOFU_LATEST_URL: Final[str] = (
+    "https://api.github.com/repos/opentofu/opentofu/releases/latest"
+)
 SYSTEM_VERSION: Final[str] = "system"
 LATEST_VERSION: Final[str] = "latest"
-LATEST_URL: Final[str] = "https://checkpoint-api.hashicorp.com/v1/check/terraform"
 LATEST_CACHE_FILE: Final[str] = ".latest.json"
 LATEST_TTL_SECONDS: Final[int] = 24 * 60 * 60
 _EXACT_VERSION: Final[re.Pattern[str]] = re.compile(r"^\d+\.\d+\.\d+$")
@@ -68,7 +79,9 @@ _ARCH_NAMES: Final[MappingProxyType[str, str]] = MappingProxyType(
 )
 
 
-class LatestRelease(NamedTuple):
+@serde
+@dataclass(frozen=True)
+class LatestRelease:
     """The latest stable version and when it was looked up."""
 
     version: str
@@ -80,11 +93,6 @@ class EnginePlatform(NamedTuple):
 
     os_name: str
     arch: str
-
-    @property
-    def binary_name(self) -> str:
-        """Name of the terraform executable inside the archive."""
-        return "terraform.exe" if self.os_name == "windows" else "terraform"
 
 
 def detect_platform() -> EnginePlatform:
@@ -101,13 +109,143 @@ def detect_platform() -> EnginePlatform:
     return EnginePlatform(os_name, arch)
 
 
-def _expected_checksum(sums: bytes, archive_name: str, version: str) -> str:
+def _binary_name(base_name: str, os_name: str) -> str:
+    """Name of the engine executable inside the archive, or on `PATH`."""
+    return f"{base_name}.exe" if os_name == "windows" else base_name
+
+
+def _expected_checksum(
+    engine_name: str, sums: bytes, archive_name: str, version: str
+) -> str:
     """Find the checksum of `archive_name` in a `SHA256SUMS` file."""
     for line in sums.decode().splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == archive_name:
             return parts[0]
-    raise EngineDownloadError(version, f"no checksum published for `{archive_name}`")
+    raise EngineDownloadError(
+        engine_name, version, f"no checksum published for `{archive_name}`"
+    )
+
+
+@serde
+@dataclass(frozen=True)
+class _HashicorpLatestResponse:
+    """Shape of HashiCorp's checkpoint API response, ignoring fields we don't need."""
+
+    current_version: str
+
+
+@serde
+@dataclass(frozen=True)
+class _OpenTofuLatestResponse:
+    """Shape of GitHub's `releases/latest` response, ignoring fields we don't need."""
+
+    tag_name: str
+
+
+class EngineDescriptor(ABC):
+    """Static, per-engine-name knowledge needed to locate and name its releases."""
+
+    @property
+    @abstractmethod
+    def binary_base_name(self) -> str:
+        """Name of the executable inside the archive, or on `PATH`."""
+
+    @property
+    @abstractmethod
+    def latest_url(self) -> str:
+        """URL to resolve the current stable version from."""
+
+    @abstractmethod
+    def archive_name(self, version: str, target: EnginePlatform) -> str:
+        """Name of the release archive for `version`/`target`."""
+
+    @abstractmethod
+    def checksum_name(self, version: str) -> str:
+        """Name of the published checksums file for `version`."""
+
+    @abstractmethod
+    def download_base_url(self, version: str) -> str:
+        """Directory URL `archive_name`/`checksum_name` are downloaded from."""
+
+    @abstractmethod
+    def parse_latest(self, body: bytes) -> str | None:
+        """Extract the current stable version from a `latest_url` response, or `None`."""
+
+
+class _TerraformDescriptor(EngineDescriptor):
+    """Release layout of HashiCorp's official terraform builds."""
+
+    @property
+    @override
+    def binary_base_name(self) -> str:
+        return "terraform"
+
+    @property
+    @override
+    def latest_url(self) -> str:
+        return HASHICORP_LATEST_URL
+
+    @override
+    def archive_name(self, version: str, target: EnginePlatform) -> str:
+        return f"terraform_{version}_{target.os_name}_{target.arch}.zip"
+
+    @override
+    def checksum_name(self, version: str) -> str:
+        return f"terraform_{version}_SHA256SUMS"
+
+    @override
+    def download_base_url(self, version: str) -> str:
+        return f"{HASHICORP_RELEASES_URL}/{version}"
+
+    @override
+    def parse_latest(self, body: bytes) -> str | None:
+        try:
+            return from_json(_HashicorpLatestResponse, body).current_version
+        except (ValueError, SerdeError):
+            return None
+
+
+class _OpenTofuDescriptor(EngineDescriptor):
+    """Release layout of OpenTofu's GitHub releases."""
+
+    @property
+    @override
+    def binary_base_name(self) -> str:
+        return "tofu"
+
+    @property
+    @override
+    def latest_url(self) -> str:
+        return OPENTOFU_LATEST_URL
+
+    @override
+    def archive_name(self, version: str, target: EnginePlatform) -> str:
+        return f"tofu_{version}_{target.os_name}_{target.arch}.zip"
+
+    @override
+    def checksum_name(self, version: str) -> str:
+        return f"tofu_{version}_SHA256SUMS"
+
+    @override
+    def download_base_url(self, version: str) -> str:
+        return f"{OPENTOFU_RELEASES_URL}/v{version}"
+
+    @override
+    def parse_latest(self, body: bytes) -> str | None:
+        try:
+            tag = from_json(_OpenTofuLatestResponse, body).tag_name
+        except (ValueError, SerdeError):
+            return None
+        return tag.removeprefix("v")
+
+
+ENGINE_DESCRIPTORS: Final[MappingProxyType[str, EngineDescriptor]] = MappingProxyType(
+    {
+        "terraform": _TerraformDescriptor(),
+        "opentofu": _OpenTofuDescriptor(),
+    }
+)
 
 
 class EngineManager:
@@ -130,10 +268,9 @@ class EngineManager:
             ),
         )
 
-    @property
-    def engines_dir(self) -> Path:
-        """Cache directory of terraform binaries, resolved lazily like `target`."""
-        return Path.home() / ".terranova" / "engines" / "terraform"
+    def engines_dir(self, engine_name: str) -> Path:
+        """Cache directory of `engine_name` binaries, resolved lazily like `target`."""
+        return Path.home() / ".terranova" / "engines" / engine_name
 
     @property
     def target(self) -> EnginePlatform:
@@ -142,7 +279,7 @@ class EngineManager:
 
     def resolve(self, engine: ResourcesEngine | None) -> Path | None:
         """
-        Resolve the terraform binary for an engine.
+        Resolve the pinned binary for an engine.
 
         `latest` is looked up at most once per `LATEST_TTL_SECONDS`, so runs stay
         consistent and work offline once a version is installed.
@@ -157,18 +294,23 @@ class EngineManager:
         if engine is None or engine.version == SYSTEM_VERSION:
             return None
 
+        descriptor = ENGINE_DESCRIPTORS[engine.name]
         target = self.target
         version = (
-            self.__latest_version()
+            self.__latest_version(engine.name, descriptor)
             if engine.version == LATEST_VERSION
             else engine.version
         )
-        binary = self.engines_dir / version / target.binary_name
+        binary = (
+            self.engines_dir(engine.name)
+            / version
+            / _binary_name(descriptor.binary_base_name, target.os_name)
+        )
         if binary.is_file():
             return binary
 
-        archive = self.__download_verified(version, target)
-        return self.__install(archive, version, target)
+        archive = self.__download_verified(engine.name, descriptor, version, target)
+        return self.__install(engine.name, descriptor, archive, version, target)
 
     def prepare(self, manifests: Iterable[ResourcesManifest]) -> None:
         """
@@ -181,7 +323,7 @@ class EngineManager:
             EngineError: on the first failing version.
         """
         engines = {
-            m.engine.version: m.engine
+            (m.engine.name, m.engine.version): m.engine
             for m in manifests
             if m.engine and m.engine.version != SYSTEM_VERSION
         }
@@ -193,14 +335,14 @@ class EngineManager:
             for future in futures:
                 future.result()
 
-    def __latest_version(self) -> str:
+    def __latest_version(self, engine_name: str, descriptor: EngineDescriptor) -> str:
         """Latest stable version, from the local lookup cache while it is fresh."""
-        cache_file = self.engines_dir / LATEST_CACHE_FILE
+        cache_file = self.engines_dir(engine_name) / LATEST_CACHE_FILE
         cached = self.__read_latest(cache_file)
         if cached and time.time() - cached.checked_at < LATEST_TTL_SECONDS:
             return cached.version
         try:
-            version = self.__fetch_latest()
+            version = self.__fetch_latest(engine_name, descriptor)
         except EngineDownloadError:
             # A stale answer beats failing when offline.
             if cached:
@@ -209,19 +351,16 @@ class EngineManager:
         self.__write_latest(cache_file, LatestRelease(version, time.time()))
         return version
 
-    def __fetch_latest(self) -> str:
-        """Ask HashiCorp's checkpoint API for the current stable version."""
-        log.action("Resolve latest terraform version")
-        body = self.__fetch(LATEST_URL, LATEST_VERSION)
-        try:
-            version = cast("dict[str, object]", json.loads(body)).get("current_version")
-        except (ValueError, AttributeError) as err:
+    def __fetch_latest(self, engine_name: str, descriptor: EngineDescriptor) -> str:
+        """Ask the engine's release index for the current stable version."""
+        log.action(f"Resolve latest {engine_name} version")
+        body = self.__fetch(engine_name, descriptor.latest_url, LATEST_VERSION)
+        version = descriptor.parse_latest(body)
+        if version is None or not _EXACT_VERSION.match(version):
             raise EngineDownloadError(
-                LATEST_VERSION, f"invalid response: {err}"
-            ) from err
-        if not isinstance(version, str) or not _EXACT_VERSION.match(version):
-            raise EngineDownloadError(
-                LATEST_VERSION, f"unexpected version `{version}` in response"
+                engine_name,
+                LATEST_VERSION,
+                f"unexpected version `{version}` in response",
             )
         return version
 
@@ -229,11 +368,8 @@ class EngineManager:
     def __read_latest(cache_file: Path) -> LatestRelease | None:
         """Read the lookup cache, treating a missing or corrupt file as empty."""
         try:
-            data = cast("dict[str, object]", json.loads(cache_file.read_text()))
-            return LatestRelease(
-                str(data["version"]), float(cast("float", data["checked_at"]))
-            )
-        except (OSError, ValueError, KeyError, TypeError):
+            return from_json(LatestRelease, cache_file.read_text())
+        except (OSError, ValueError, SerdeError):
             return None
 
     def __write_latest(self, cache_file: Path, release: LatestRelease) -> None:
@@ -243,39 +379,56 @@ class EngineManager:
             with tempfile.NamedTemporaryFile(
                 "w", dir=cache_file.parent, delete=False
             ) as tmp:
-                json.dump(release._asdict(), tmp)
+                tmp.write(to_json(release))
             os.replace(tmp.name, cache_file)
         except OSError:
             pass
 
-    def __fetch(self, url: str, version: str) -> bytes:
+    def __fetch(self, engine_name: str, url: str, version: str) -> bytes:
         """Download `url` in memory."""
         try:
             response = self.__http.request("GET", url)
         except urllib3.exceptions.HTTPError as err:
-            raise EngineDownloadError(version, str(err)) from err
+            raise EngineDownloadError(engine_name, version, str(err)) from err
         if response.status != 200:
-            raise EngineDownloadError(version, f"HTTP {response.status} for {url}")
+            raise EngineDownloadError(
+                engine_name, version, f"HTTP {response.status} for {url}"
+            )
         return response.data
 
-    def __download_verified(self, version: str, target: EnginePlatform) -> bytes:
+    def __download_verified(
+        self,
+        engine_name: str,
+        descriptor: EngineDescriptor,
+        version: str,
+        target: EnginePlatform,
+    ) -> bytes:
         """Download the release archive and check it against the published SHA-256."""
-        archive_name = f"terraform_{version}_{target.os_name}_{target.arch}.zip"
-        base_url = f"{RELEASES_URL}/{version}"
+        archive_name = descriptor.archive_name(version, target)
+        base_url = descriptor.download_base_url(version)
 
-        log.action(f"Download terraform {version}")
-        archive = self.__fetch(f"{base_url}/{archive_name}", version)
-        sums = self.__fetch(f"{base_url}/terraform_{version}_SHA256SUMS", version)
+        log.action(f"Download {engine_name} {version}")
+        archive = self.__fetch(engine_name, f"{base_url}/{archive_name}", version)
+        sums = self.__fetch(
+            engine_name, f"{base_url}/{descriptor.checksum_name(version)}", version
+        )
         if hashlib.sha256(archive).hexdigest() != _expected_checksum(
-            sums, archive_name, version
+            engine_name, sums, archive_name, version
         ):
-            raise EngineChecksumError(version)
+            raise EngineChecksumError(engine_name, version)
         return archive
 
-    def __install(self, archive: bytes, version: str, target: EnginePlatform) -> Path:
+    def __install(
+        self,
+        engine_name: str,
+        descriptor: EngineDescriptor,
+        archive: bytes,
+        version: str,
+        target: EnginePlatform,
+    ) -> Path:
         """Extract the binary into `engines_dir/version`, atomically, and return its path."""
-        root = self.engines_dir
-        binary_name = target.binary_name
+        root = self.engines_dir(engine_name)
+        binary_name = _binary_name(descriptor.binary_base_name, target.os_name)
         target_dir = root / version
         binary = target_dir / binary_name
 
@@ -288,7 +441,9 @@ class EngineManager:
                 with zipfile.ZipFile(io.BytesIO(archive)) as zf:
                     (staging / binary_name).write_bytes(zf.read(binary_name))
             except (zipfile.BadZipFile, KeyError) as err:
-                raise EngineDownloadError(version, f"invalid archive: {err}") from err
+                raise EngineDownloadError(
+                    engine_name, version, f"invalid archive: {err}"
+                ) from err
             (staging / binary_name).chmod(EXECUTABLE_MODE)
             try:
                 os.rename(staging, target_dir)

@@ -63,11 +63,12 @@ def runbook(ctx: AppContext, path: str, name: str) -> None:
         ctx.verbose,
     )
 
-    # Resolve the pinned engine so runbooks see the same terraform as the group
+    # Resolve the pinned engine so runbooks see the same binary as the group
+    engine_name = manifest.engine.name if manifest.engine else "terraform"
     try:
         binary = default_engine_manager().resolve(manifest.engine)
     except EngineError as err:
-        log.fatal("resolve terraform engine", err)
+        log.fatal(f"resolve {engine_name} engine", err)
 
     # Execute runbook
     executable_runbook = next(iter(matching_runbooks))
