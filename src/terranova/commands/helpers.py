@@ -30,6 +30,7 @@ from terranova.engines import default_engine_manager
 from terranova.exceptions import (
     EngineError,
     GitRepositoryError,
+    GraphError,
     InvalidResourcesError,
     ManifestError,
 )
@@ -458,5 +459,8 @@ def read_manifests_and_waves(
     except EngineError as err:
         log.fatal("prepare terraform engines", err)
     graph = build_dependency_graph(paths, manifests)
-    waves = compute_waves(graph)
+    try:
+        waves = compute_waves(graph)
+    except GraphError as err:
+        log.fatal("compute execution waves", err)
     return manifests, waves

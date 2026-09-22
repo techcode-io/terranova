@@ -17,11 +17,12 @@
 import os
 from dataclasses import dataclass, field
 from graphlib import CycleError, TopologicalSorter
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 
 from terranova.exceptions import CyclicImportError
-from terranova.resources import ResourcesManifest
+from terranova.resources import ResourcesImport, ResourcesManifest
 
 
 def normalize_rel_path(path: str) -> str:
@@ -42,6 +43,8 @@ class DependencyGraph:
     nodes: set[str] = field(default_factory=set)
     # Maps a resource group's rel_path to the set of rel_paths it imports from.
     depends_on: dict[str, set[str]] = field(default_factory=dict)
+    # Maps a (importer_node, source_node) edge to the `ResourcesImport` that created it.
+    edge_imports: dict[tuple[str, str], ResourcesImport] = field(default_factory=dict)
 
 
 def build_dependency_graph(
@@ -66,6 +69,7 @@ def build_dependency_graph(
     """
     nodes = {normalize_rel_path(rel_path) for _, rel_path in paths}
     depends_on: dict[str, set[str]] = {node: set() for node in nodes}
+    edge_imports: dict[tuple[str, str], ResourcesImport] = {}
 
     for _, rel_path in paths:
         node = normalize_rel_path(rel_path)
@@ -76,8 +80,11 @@ def build_dependency_graph(
             source = normalize_rel_path(importer.source)
             if source in nodes:
                 depends_on[node].add(source)
+                edge_imports[(node, source)] = importer
 
-    return DependencyGraph(nodes=nodes, depends_on=depends_on)
+    return DependencyGraph(
+        nodes=nodes, depends_on=depends_on, edge_imports=edge_imports
+    )
 
 
 def compute_waves(graph: DependencyGraph) -> list[Wave]:
@@ -104,8 +111,10 @@ def compute_waves(graph: DependencyGraph) -> list[Wave]:
     try:
         sorter.prepare()
     except CycleError as err:
-        cycle = cast("list[str]", err.args[1])
-        raise CyclicImportError(cycle) from err
+        cycle = list(reversed(cast("list[str]", err.args[1])))
+        raise CyclicImportError(
+            cycle, _describe_cycle_edges(cycle, graph.edge_imports)
+        ) from err
 
     waves: list[Wave] = []
     while sorter.is_active():
@@ -114,3 +123,21 @@ def compute_waves(graph: DependencyGraph) -> list[Wave]:
         sorter.done(*ready)
 
     return waves
+
+
+def _describe_cycle_edges(
+    cycle: list[str], edge_imports: dict[tuple[str, str], ResourcesImport]
+) -> list[str]:
+    """Render each edge of a cycle as the `imports` entry that created it, where known."""
+    edges: list[str] = []
+    for node, source in pairwise(cycle):
+        importer = edge_imports.get((node, source))
+        if importer is None:
+            continue
+        if importer.target:
+            edges.append(
+                f"`{node}` imports `{importer.resource}` from `{source}` as `{importer.target}`"
+            )
+        else:
+            edges.append(f"`{node}` imports `{importer.resource}` from `{source}`")
+    return edges
