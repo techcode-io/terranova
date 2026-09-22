@@ -271,6 +271,15 @@ engine:
 - Downloads are available for Linux, macOS and Windows (amd64 and arm64).
 - Runbooks of that resource group also get the pinned binary first on their `PATH`. Without an `engine` block, or with `system`, they keep the system `PATH` (looking up `terraform` or `tofu` depending on `engine.name`).
 
+### How to manage cached engine versions.
+
+- `terranova runtime ls [--engine terraform|opentofu]` lists the versions cached under `~/.terranova/engines/`, their size on disk, and whether a manifest under the conf dir still pins them.
+- `terranova runtime install <version> [--engine terraform|opentofu]` downloads, verifies and caches a version ahead of time (for CI images or offline use) without needing a manifest. A no-op if the version is already cached.
+- `terranova runtime rm <version> [--engine terraform|opentofu] [--force]` removes one cached version; refuses if a manifest under the conf dir still pins it, unless `--force` is passed.
+- `terranova runtime prune [--dry-run]` removes every cached version not pinned by any manifest under the conf dir.
+- `version: system` is never listed, installed or removed, since nothing is cached for it.
+- Unlike every other command, `terranova runtime ...` works without an existing `--conf-dir`; when it isn't given or doesn't exist, no manifest is considered pinned.
+
 ### How to run commands across resource groups in parallel.
 
 - By default, `terranova` runs with `--strategy sequential`: one resource group after another.

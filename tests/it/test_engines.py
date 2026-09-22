@@ -31,6 +31,7 @@ from terranova.engines import EngineManager, EnginePlatform
 from terranova.exceptions import (
     EngineChecksumError,
     EngineDownloadError,
+    EngineNotInstalledError,
     UnsupportedEnginePlatformError,
 )
 from terranova.resources import ResourcesEngine, ResourcesManifest, ResourcesMetadata
@@ -512,3 +513,99 @@ def test_prepare_resolves_latest_and_exact_together(
         for p in (cache_dir / "terraform").iterdir()
         if not p.name.startswith(".")
     ) == ["1.9.5"]
+
+
+def test_pinned_engines_dedups_and_excludes_system() -> None:
+    manifests = [
+        _manifest("1.9.5"),
+        _manifest("1.9.5"),
+        _manifest("1.8.0"),
+        _manifest("system"),
+        _manifest(None),
+    ]
+    pinned = EngineManager().pinned_engines(manifests)
+    assert set(pinned) == {("terraform", "1.9.5"), ("terraform", "1.8.0")}
+
+
+def test_pinned_engines_empty_for_no_manifests() -> None:
+    assert EngineManager().pinned_engines([]) == {}
+
+
+@pytest.mark.usefixtures("cache_dir")
+def test_list_installed_empty_cache() -> None:
+    assert EngineManager().list_installed() == []
+
+
+def test_list_installed_lists_across_engines(cache_dir: Path) -> None:
+    tf_bin = cache_dir / "terraform" / "1.9.5" / "terraform"
+    tf_bin.parent.mkdir(parents=True)
+    tf_bin.write_bytes(b"tf-binary")
+    ot_bin = cache_dir / "opentofu" / "1.7.0" / "tofu"
+    ot_bin.parent.mkdir(parents=True)
+    ot_bin.write_bytes(b"tofu-binary")
+    # A stray `.latest.json` next to a version dir must not be listed as a version.
+    (cache_dir / "terraform" / engines.LATEST_CACHE_FILE).write_text("{}")
+
+    installed = EngineManager().list_installed()
+    assert sorted((i.engine_name, i.version) for i in installed) == [
+        ("opentofu", "1.7.0"),
+        ("terraform", "1.9.5"),
+    ]
+    tf_entry = next(i for i in installed if i.engine_name == "terraform")
+    assert tf_entry.size_bytes == len(b"tf-binary")
+    assert tf_entry.path == tf_bin.parent
+
+
+def test_list_installed_filters_by_engine(cache_dir: Path) -> None:
+    for name, binary in (("terraform", "terraform"), ("opentofu", "tofu")):
+        path = cache_dir / name / "1.0.0" / binary
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"x")
+    installed = EngineManager().list_installed("opentofu")
+    assert [i.engine_name for i in installed] == ["opentofu"]
+
+
+def test_remove_deletes_installed_version(cache_dir: Path) -> None:
+    path = cache_dir / "terraform" / "1.9.5" / "terraform"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x")
+    EngineManager().remove("terraform", "1.9.5")
+    assert not path.parent.exists()
+
+
+@pytest.mark.usefixtures("cache_dir")
+def test_remove_raises_when_not_installed() -> None:
+    with pytest.raises(EngineNotInstalledError):
+        EngineManager().remove("terraform", "1.9.5")
+
+
+def test_prune_removes_versions_not_kept(cache_dir: Path) -> None:
+    kept = cache_dir / "terraform" / "1.9.5" / "terraform"
+    kept.parent.mkdir(parents=True)
+    kept.write_bytes(b"x")
+    stale = cache_dir / "terraform" / "1.8.0" / "terraform"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"x")
+
+    removed = EngineManager().prune([("terraform", "1.9.5")])
+    assert [(i.engine_name, i.version) for i in removed] == [("terraform", "1.8.0")]
+    assert kept.parent.exists()
+    assert not stale.parent.exists()
+
+
+def test_prune_removes_nothing_when_all_kept(cache_dir: Path) -> None:
+    kept = cache_dir / "terraform" / "1.9.5" / "terraform"
+    kept.parent.mkdir(parents=True)
+    kept.write_bytes(b"x")
+    removed = EngineManager().prune([("terraform", "1.9.5")])
+    assert removed == []
+    assert kept.parent.exists()
+
+
+def test_prune_dry_run_does_not_delete(cache_dir: Path) -> None:
+    stale = cache_dir / "terraform" / "1.8.0" / "terraform"
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"x")
+    removed = EngineManager().prune([], dry_run=True)
+    assert [(i.engine_name, i.version) for i in removed] == [("terraform", "1.8.0")]
+    assert stale.parent.exists()

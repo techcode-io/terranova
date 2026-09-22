@@ -13,6 +13,7 @@ from terranova.commands.helpers import (
     SelectorType,
     auto_scope_resource_dirs,
     discover_resources,
+    engine_versions_in_use,
     extract_import_vars,
     extract_output_var,
     find_all_resource_dirs,
@@ -28,6 +29,7 @@ from terranova.resources import (
     ResourcesMetadata,
     Selector,
 )
+from terranova.utils import AppContext
 from tests.conftest import FakeTerraform
 
 _VALID_MANIFEST: Final[str] = """
@@ -50,6 +52,22 @@ def _write_manifest_dir(base: Path, *parts: str) -> Path:
     resource_dir = base.joinpath(*parts)
     resource_dir.mkdir(parents=True, exist_ok=True)
     (resource_dir / "manifest.yml").write_text(textwrap.dedent(_VALID_MANIFEST))
+    return resource_dir
+
+
+def _write_manifest_dir_with_engine(
+    base: Path, name: str, engine_name: str, version: str
+) -> Path:
+    resource_dir = base / name
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    (resource_dir / "manifest.yml").write_text(f"""version: "1.4"
+metadata:
+  name: {name}
+  description: test
+engine:
+  name: {engine_name}
+  version: "{version}"
+""")
     return resource_dir
 
 
@@ -434,6 +452,33 @@ class TestResolveResourceDirs:
         result = resolve_resource_dirs(tmp_path, resources_dir, None, True)
 
         assert result == [(group_a, "group_a")]
+
+
+class TestEngineVersionsInUse:
+    def test_no_manifests_returns_empty_set(self, tmp_path: Path) -> None:
+        ctx = AppContext(conf_dir=tmp_path)
+        assert engine_versions_in_use(ctx) == set()
+
+    def test_missing_resources_dir_returns_empty_set(self, tmp_path: Path) -> None:
+        ctx = AppContext(conf_dir=tmp_path / "does-not-exist")
+        assert engine_versions_in_use(ctx) == set()
+
+    def test_collects_pinned_versions_across_manifests(self, tmp_path: Path) -> None:
+        resources_dir = tmp_path / "resources"
+        _write_manifest_dir_with_engine(resources_dir, "group_a", "terraform", "1.9.5")
+        _write_manifest_dir_with_engine(resources_dir, "group_b", "opentofu", "1.7.0")
+        ctx = AppContext(conf_dir=tmp_path)
+        assert engine_versions_in_use(ctx) == {
+            ("terraform", "1.9.5"),
+            ("opentofu", "1.7.0"),
+        }
+
+    def test_excludes_system_and_unpinned_manifests(self, tmp_path: Path) -> None:
+        resources_dir = tmp_path / "resources"
+        _write_manifest_dir_with_engine(resources_dir, "group_a", "terraform", "system")
+        _write_manifest_dir(resources_dir, "group_b")
+        ctx = AppContext(conf_dir=tmp_path)
+        assert engine_versions_in_use(ctx) == set()
 
 
 class TestReadManifestsAndWaves:

@@ -43,6 +43,7 @@ from urllib3.util import Retry, Timeout
 from terranova.exceptions import (
     EngineChecksumError,
     EngineDownloadError,
+    EngineNotInstalledError,
     UnsupportedEnginePlatformError,
 )
 from terranova.resources import ResourcesEngine, ResourcesManifest
@@ -93,6 +94,15 @@ class EnginePlatform(NamedTuple):
 
     os_name: str
     arch: str
+
+
+class InstalledEngine(NamedTuple):
+    """One cached version directory under `engines_dir(engine_name)`."""
+
+    engine_name: str
+    version: str
+    path: Path
+    size_bytes: int
 
 
 def detect_platform() -> EnginePlatform:
@@ -312,6 +322,16 @@ class EngineManager:
         archive = self.__download_verified(engine.name, descriptor, version, target)
         return self.__install(engine.name, descriptor, archive, version, target)
 
+    def pinned_engines(
+        self, manifests: Iterable[ResourcesManifest]
+    ) -> dict[tuple[str, str], ResourcesEngine]:
+        """Distinct `(name, version)` -> engine pinned across `manifests`, excluding `system`."""
+        return {
+            (m.engine.name, m.engine.version): m.engine
+            for m in manifests
+            if m.engine and m.engine.version != SYSTEM_VERSION
+        }
+
     def prepare(self, manifests: Iterable[ResourcesManifest]) -> None:
         """
         Ensure every distinct `latest` or exact engine version is cached.
@@ -322,11 +342,7 @@ class EngineManager:
         Raises:
             EngineError: on the first failing version.
         """
-        engines = {
-            (m.engine.name, m.engine.version): m.engine
-            for m in manifests
-            if m.engine and m.engine.version != SYSTEM_VERSION
-        }
+        engines = self.pinned_engines(manifests)
         if not engines:
             return
         workers = min(len(engines), MAX_CONCURRENT_DOWNLOADS)
@@ -334,6 +350,58 @@ class EngineManager:
             futures = [pool.submit(self.resolve, e) for e in engines.values()]
             for future in futures:
                 future.result()
+
+    def list_installed(self, engine_name: str | None = None) -> list[InstalledEngine]:
+        """
+        Installed versions cached under `engines_dir`, across one or every engine.
+
+        Only directory entries count as a version - `LATEST_CACHE_FILE`
+        (`.latest.json`) sits next to them as a plain file and is skipped.
+        """
+        names = [engine_name] if engine_name else list(ENGINE_DESCRIPTORS)
+        installed: list[InstalledEngine] = []
+        for name in names:
+            root = self.engines_dir(name)
+            if not root.is_dir():
+                continue
+            for entry in sorted(root.iterdir()):
+                if not entry.is_dir():
+                    continue
+                size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
+                installed.append(InstalledEngine(name, entry.name, entry, size))
+        return installed
+
+    def remove(self, engine_name: str, version: str) -> None:
+        """
+        Delete one cached version directory.
+
+        Raises:
+            EngineNotInstalledError: if `version` isn't cached for `engine_name`.
+        """
+        target_dir = self.engines_dir(engine_name) / version
+        if not target_dir.is_dir():
+            raise EngineNotInstalledError(engine_name, version)
+        shutil.rmtree(target_dir)
+
+    def prune(
+        self, keep: Iterable[tuple[str, str]], *, dry_run: bool = False
+    ) -> list[InstalledEngine]:
+        """
+        Remove every installed version whose `(name, version)` isn't in `keep`.
+
+        With `dry_run=True`, only returns what would be removed - the same
+        selection logic, no filesystem change.
+        """
+        keep_set = set(keep)
+        candidates = [
+            e
+            for e in self.list_installed()
+            if (e.engine_name, e.version) not in keep_set
+        ]
+        if not dry_run:
+            for entry in candidates:
+                shutil.rmtree(entry.path)
+        return candidates
 
     def __latest_version(self, engine_name: str, descriptor: EngineDescriptor) -> str:
         """Latest stable version, from the local lookup cache while it is fresh."""

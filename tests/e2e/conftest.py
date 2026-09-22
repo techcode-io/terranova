@@ -37,6 +37,14 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+@pytest.fixture
+def cache_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point `EngineManager`'s cache at `tmp_path` through the home directory."""
+    monkeypatch.setenv("HOME", tmp_path.as_posix())
+    monkeypatch.setenv("USERPROFILE", tmp_path.as_posix())
+    return tmp_path / ".terranova" / "engines"
+
+
 def copy_as_git_repo(fixture_dir: Path, dest: Path) -> None:
     """
     Copy `fixture_dir` to `dest` and commit it as a fresh git repo.
