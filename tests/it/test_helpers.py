@@ -18,6 +18,7 @@ from terranova.commands.helpers import (
     find_all_resource_dirs,
     mount_context,
     read_manifest,
+    read_manifests_and_waves,
     resolve_resource_dirs,
     resource_dirs,
 )
@@ -49,6 +50,20 @@ def _write_manifest_dir(base: Path, *parts: str) -> Path:
     resource_dir = base.joinpath(*parts)
     resource_dir.mkdir(parents=True, exist_ok=True)
     (resource_dir / "manifest.yml").write_text(textwrap.dedent(_VALID_MANIFEST))
+    return resource_dir
+
+
+def _write_manifest_dir_importing(base: Path, name: str, source: str) -> Path:
+    resource_dir = base / name
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    (resource_dir / "manifest.yml").write_text(f"""version: "1.2"
+metadata:
+  name: {name}
+  description: test
+imports:
+  - from: {source}
+    import: some_output
+""")
     return resource_dir
 
 
@@ -419,3 +434,38 @@ class TestResolveResourceDirs:
         result = resolve_resource_dirs(tmp_path, resources_dir, None, True)
 
         assert result == [(group_a, "group_a")]
+
+
+class TestReadManifestsAndWaves:
+    def test_two_group_cycle_calls_log_fatal(
+        self, resources_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_manifest_dir_importing(resources_dir, "group_a", "group_b")
+        _write_manifest_dir_importing(resources_dir, "group_b", "group_a")
+        paths = resource_dirs(resources_dir, None)
+
+        with pytest.raises(Exit) as exc_info:
+            read_manifests_and_waves(paths)
+
+        assert exc_info.value.exit_code == 1
+        err = capsys.readouterr().err
+        assert "Cause:" in err
+        assert "Resolution:" in err
+        assert "Traceback" not in err
+
+    def test_three_group_cycle_calls_log_fatal(
+        self, resources_dir: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _write_manifest_dir_importing(resources_dir, "group_a", "group_b")
+        _write_manifest_dir_importing(resources_dir, "group_b", "group_c")
+        _write_manifest_dir_importing(resources_dir, "group_c", "group_a")
+        paths = resource_dirs(resources_dir, None)
+
+        with pytest.raises(Exit) as exc_info:
+            read_manifests_and_waves(paths)
+
+        assert exc_info.value.exit_code == 1
+        err = capsys.readouterr().err
+        assert "Cause:" in err
+        assert "Resolution:" in err
+        assert "Traceback" not in err

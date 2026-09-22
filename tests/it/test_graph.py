@@ -30,6 +30,18 @@ imports:
 """
 
 
+def _manifest_with_import_as(source: str, target: str) -> str:
+    return f"""version: "1.2"
+metadata:
+  name: test
+  description: test
+imports:
+  - from: {source}
+    import: some_output
+    as: {target}
+"""
+
+
 def _write_manifest_dir(base: Path, rel_path: str, content: str) -> tuple[Path, str]:
     resource_dir = base.joinpath(*rel_path.split("/"))
     resource_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +80,26 @@ class TestComputeWaves:
         graph = DependencyGraph(nodes={"a", "b"}, depends_on={"a": {"b"}, "b": {"a"}})
         with pytest.raises(CyclicImportError):
             compute_waves(graph)
+
+    def test_cycle_message_preserves_chain_order(self) -> None:
+        """
+        The cause should describe the actual cycle chain, not an alphabetically
+        sorted node list - assert on the set of consecutive edges rather than a
+        fixed string, since which node the cycle is reported as "starting" from
+        isn't guaranteed deterministic (`TopologicalSorter` iterates a `set`).
+        """
+        graph = DependencyGraph(
+            nodes={"a", "b", "c"},
+            depends_on={"a": {"b"}, "b": {"c"}, "c": {"a"}},
+        )
+        with pytest.raises(CyclicImportError) as exc_info:
+            compute_waves(graph)
+
+        chain = exc_info.value.cause.rsplit(": ", 1)[-1].split(" -> ")
+        assert chain[0] == chain[-1]
+        edges = set(zip(chain, chain[1:]))
+        assert edges <= {("a", "b"), ("b", "c"), ("c", "a")}
+        assert len(edges) == 3
 
     def test_empty_graph_no_waves(self) -> None:
         graph = DependencyGraph(nodes=set(), depends_on={})
@@ -133,3 +165,56 @@ class TestBuildDependencyGraph:
         graph = build_dependency_graph(paths, manifests)
         assert graph.depends_on["consumer"] == set()
         assert compute_waves(graph) == [["consumer"]]
+
+
+class TestCyclicImportDetails:
+    def test_two_group_cycle_names_the_imports(self, resources_dir: Path) -> None:
+        dir_a, rel_a = _write_manifest_dir(
+            resources_dir, "group_a", _manifest_with_imports("group_b")
+        )
+        dir_b, rel_b = _write_manifest_dir(
+            resources_dir, "group_b", _manifest_with_imports("group_a")
+        )
+        paths = [(dir_a, rel_a), (dir_b, rel_b)]
+        manifests = {
+            rel_path: ResourcesManifest.from_file(full_path / "manifest.yml")
+            for full_path, rel_path in paths
+        }
+        graph = build_dependency_graph(paths, manifests)
+
+        with pytest.raises(CyclicImportError) as exc_info:
+            compute_waves(graph)
+
+        resolution = exc_info.value.resolution
+        assert resolution is not None
+        assert "Remove or redirect" in resolution
+        assert "`group_a` imports `some_output` from `group_b`" in resolution
+        assert "`group_b` imports `some_output` from `group_a`" in resolution
+
+    def test_three_group_cycle_names_the_imports(self, resources_dir: Path) -> None:
+        dir_a, rel_a = _write_manifest_dir(
+            resources_dir, "group_a", _manifest_with_imports("group_b")
+        )
+        dir_b, rel_b = _write_manifest_dir(
+            resources_dir, "group_b", _manifest_with_imports("group_c")
+        )
+        dir_c, rel_c = _write_manifest_dir(
+            resources_dir, "group_c", _manifest_with_import_as("group_a", "renamed")
+        )
+        paths = [(dir_a, rel_a), (dir_b, rel_b), (dir_c, rel_c)]
+        manifests = {
+            rel_path: ResourcesManifest.from_file(full_path / "manifest.yml")
+            for full_path, rel_path in paths
+        }
+        graph = build_dependency_graph(paths, manifests)
+
+        with pytest.raises(CyclicImportError) as exc_info:
+            compute_waves(graph)
+
+        resolution = exc_info.value.resolution
+        assert resolution is not None
+        assert "`group_a` imports `some_output` from `group_b`" in resolution
+        assert "`group_b` imports `some_output` from `group_c`" in resolution
+        assert (
+            "`group_c` imports `some_output` from `group_a` as `renamed`" in resolution
+        )

@@ -134,12 +134,26 @@ class GraphError(ExplainedError):
 class CyclicImportError(GraphError):
     """Represents a cyclic dependency between resource groups' `imports`."""
 
-    def __init__(self, rel_paths: list[str]) -> None:
+    def __init__(self, rel_paths: list[str], edges: list[str] | None = None) -> None:
         """Init cyclic import error."""
-        stuck = ", ".join(sorted(rel_paths))
+        chain = " -> ".join(rel_paths)
+        constraint = (
+            "A resource group cannot depend, directly or indirectly, "
+            "on a group that depends on it."
+        )
+        if edges:
+            resolution = (
+                "Remove or redirect one of these `imports` entries to break the cycle: "
+                f"{'; '.join(edges)}. {constraint}"
+            )
+        else:
+            resolution = (
+                "Check the `imports` section of the involved manifests and remove the cycle. "
+                f"{constraint}"
+            )
         super().__init__(
-            cause=f"A cyclic dependency was detected between: {stuck}",
-            resolution="Check the `imports` section of the involved manifests and remove the cycle.",
+            cause=f"A cyclic dependency was detected between resource groups: {chain}",
+            resolution=resolution,
         )
 
 
