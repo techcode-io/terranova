@@ -194,6 +194,30 @@ class EngineChecksumError(EngineError):
         )
 
 
+class EngineNotInstalledError(EngineError):
+    """Represents a version that isn't cached locally."""
+
+    def __init__(self, engine_name: str, version: str) -> None:
+        """Init engine not installed error."""
+        super().__init__(
+            cause=f"{engine_name} `{version}` isn't installed in the local cache",
+            resolution=(
+                f"Run `terranova runtime install {version} --engine {engine_name}` first."
+            ),
+        )
+
+
+class EngineInUseError(EngineError):
+    """Represents an attempt to remove a cached version still pinned by a manifest."""
+
+    def __init__(self, engine_name: str, version: str) -> None:
+        """Init engine in use error."""
+        super().__init__(
+            cause=f"{engine_name} `{version}` is still pinned by a manifest under the conf dir",
+            resolution="Update or remove the manifest(s) pinning it, or pass `--force`.",
+        )
+
+
 class RunbookError(ExplainedError):
     """Represents a runbook error."""
 

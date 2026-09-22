@@ -41,6 +41,7 @@ from terranova.commands.ls import ls
 from terranova.commands.output import output
 from terranova.commands.plan import plan
 from terranova.commands.runbook import runbook
+from terranova.commands.runtime import runtime
 from terranova.commands.taint import taint
 from terranova.commands.untaint import untaint
 from terranova.commands.validate import validate
@@ -69,8 +70,11 @@ from terranova.utils import AppContext, log
 def main(ctx: click.Context, debug: bool, verbose: bool, conf_dir: Path) -> None:
     """Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale."""
     # Checked here rather than with `click.Path(exists=True)` so that
-    # `terranova completion` works without a conf dir.
-    if ctx.invoked_subcommand != "completion" and not conf_dir.exists():
+    # `terranova completion`/`runtime` work without a conf dir.
+    if (
+        ctx.invoked_subcommand not in ("completion", "runtime")
+        and not conf_dir.exists()
+    ):
         raise click.BadParameter(
             f"Path '{conf_dir}' does not exist.", ctx=ctx, param_hint="'--conf-dir'"
         )
@@ -91,6 +95,7 @@ main.add_command(ls)
 main.add_command(output)
 main.add_command(plan)
 main.add_command(runbook)
+main.add_command(runtime)
 main.add_command(taint)
 main.add_command(untaint)
 main.add_command(validate)

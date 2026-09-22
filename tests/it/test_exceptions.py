@@ -4,6 +4,8 @@ from pathlib import Path
 
 from terranova.exceptions import (
     AmbiguousRunbookError,
+    EngineInUseError,
+    EngineNotInstalledError,
     ExplainedError,
     InvalidManifestError,
     MissingManifestError,
@@ -73,4 +75,20 @@ class TestRunbookErrors:
     def test_missing_runbook_env_error_message(self) -> None:
         err = MissingRunbookEnvError("MY_VAR")
         assert err.cause == "The environment variable `MY_VAR` isn't defined."
+        assert err.resolution is not None
+
+
+class TestEngineErrors:
+    def test_engine_not_installed_error_message(self) -> None:
+        err = EngineNotInstalledError("terraform", "1.9.5")
+        assert err.cause == "terraform `1.9.5` isn't installed in the local cache"
+        assert err.resolution is not None
+        assert "runtime install 1.9.5 --engine terraform" in err.resolution
+
+    def test_engine_in_use_error_message(self) -> None:
+        err = EngineInUseError("terraform", "1.9.5")
+        assert (
+            err.cause
+            == "terraform `1.9.5` is still pinned by a manifest under the conf dir"
+        )
         assert err.resolution is not None

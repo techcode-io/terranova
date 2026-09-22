@@ -39,7 +39,7 @@ from terranova.graph import Wave, build_dependency_graph, compute_waves
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
-from terranova.utils import Constants, log
+from terranova.utils import AppContext, Constants, log
 
 auto_scope_option = click.option(
     "--auto-scope",
@@ -467,3 +467,17 @@ def read_manifests_and_waves(
     except GraphError as err:
         log.fatal("compute execution waves", err)
     return manifests, waves
+
+
+def engine_versions_in_use(ctx: AppContext) -> set[tuple[str, str]]:
+    """
+    `(engine_name, version)` pairs pinned by any manifest under `ctx.resources_dir`.
+
+    Used by `terranova runtime ls/rm/prune` to flag or gate cached versions;
+    the identity rule (exclude `system`, dedup by name+version) is the same
+    one `EngineManager.prepare()` uses before downloading, via
+    `pinned_engines()`, so the two never diverge.
+    """
+    paths = find_all_resource_dirs(ctx.resources_dir)
+    manifests = [read_manifest(full_path) for full_path, _ in paths]
+    return set(default_engine_manager().pinned_engines(manifests))
