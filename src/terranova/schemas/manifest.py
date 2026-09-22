@@ -125,7 +125,7 @@ class EngineSchema(_BaseSchema):
     """Validates a manifest's `engine` block."""
 
     name: fields.String = fields.String(
-        required=True, validate=validate.OneOf(["terraform"])
+        required=True, validate=validate.OneOf(["terraform", "opentofu"])
     )
     version: fields.String = fields.String(
         required=True,

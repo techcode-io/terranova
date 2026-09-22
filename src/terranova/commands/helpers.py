@@ -322,11 +322,14 @@ def mount_context(
             manifest, resources_dir, plugin_cache_dir, verbose
         )
     # Cache hit when `EngineManager.prepare` already ran (plan/apply), so no download here
+    engine_name = manifest.engine.name if manifest.engine else "terraform"
     try:
         binary = default_engine_manager().resolve(manifest.engine)
     except EngineError as err:
-        log.fatal("resolve terraform engine", err)
-    return Terraform(full_path, plugin_cache_dir, variables, verbose, binary)
+        log.fatal(f"resolve {engine_name} engine", err)
+    return Terraform(
+        full_path, plugin_cache_dir, variables, verbose, binary, engine_name
+    )
 
 
 class TerraformTask(ResourceGroupTask, ABC):

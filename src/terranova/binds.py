@@ -20,6 +20,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Final, cast, override
 
+from terranova.engines import ENGINE_DESCRIPTORS
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
 from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
@@ -299,6 +300,7 @@ class Terraform(Bind):
         variables: dict[str, str] | None = None,
         verbose: bool = False,
         binary: Path | None = None,
+        engine_name: str = "terraform",
     ) -> None:
         """Init terraform bind, using `binary` instead of the `PATH` lookup if given."""
         self.__work_dir = work_dir
@@ -306,15 +308,16 @@ class Terraform(Bind):
         self.__variables = variables
         self.__verbose = verbose
 
+        fallback_binary = ENGINE_DESCRIPTORS[engine_name].binary_base_name
         try:
-            super().__init__(binary or "terraform")
+            super().__init__(binary or fallback_binary)
         except CommandNotFound as err:
-            log.fatal("detect terraform binary", err)
+            log.fatal(f"detect {engine_name} binary", err)
 
         try:
             plugin_cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as err:
-            log.fatal("create terraform cache directory", err)
+            log.fatal(f"create {engine_name} cache directory", err)
 
     @override
     def create(self, cmd_path: str | Path) -> Command:

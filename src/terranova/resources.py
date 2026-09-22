@@ -147,7 +147,7 @@ class ResourcesImport:
 @serde
 @dataclass(frozen=True)
 class ResourcesEngine:
-    """Represents the engine (terraform binary) a resource group is pinned to."""
+    """Represents the engine (terraform or opentofu binary) a resource group is pinned to."""
 
     name: str
     version: str

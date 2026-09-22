@@ -84,13 +84,14 @@ class TestManifestSchemas:
         )
 
 
+@pytest.mark.parametrize("name", ["terraform", "opentofu"])
 @pytest.mark.parametrize("version", ["1.9.5", "system", "latest"])
-def test_v1_4_engine_version_is_valid(version: str) -> None:
+def test_v1_4_engine_version_is_valid(name: str, version: str) -> None:
     ManifestSchemaV1_4().load(
         {
             "version": "1.4",
             "metadata": {"name": "n", "description": "d"},
-            "engine": {"name": "terraform", "version": version},
+            "engine": {"name": name, "version": version},
         }
     )
 
@@ -98,7 +99,7 @@ def test_v1_4_engine_version_is_valid(version: str) -> None:
 @pytest.mark.parametrize(
     "engine",
     [
-        {"name": "opentofu", "version": "1.9.5"},
+        {"name": "tofu", "version": "1.9.5"},
         {"name": "terraform", "version": "^1.9"},
         {"name": "terraform"},
     ],

@@ -250,12 +250,12 @@ imports:
     as: "<working_directory>" # Optional: Name of the input variable to map to.
 ```
 
-### How to pin the terraform version.
+### How to pin the terraform/OpenTofu version.
 
 - By default, `terraform` is looked up on the `PATH`.
-- It's possible to pin the version per resource group in the manifest.
-- An exact version is downloaded from `releases.hashicorp.com`, verified against the published SHA-256 checksums and cached in `~/.terranova/engines/terraform/<version>/`.
-- `latest` is looked up on HashiCorp's checkpoint API at most once every 24 hours (the answer is kept in `~/.terranova/engines/terraform/.latest.json`), so runs stay consistent and keep working offline with a previously installed version.
+- It's possible to pin the engine and its version per resource group in the manifest, either `terraform` or `opentofu`.
+- An exact version is downloaded from the engine's official releases (HashiCorp's `releases.hashicorp.com` for `terraform`, OpenTofu's GitHub releases for `opentofu`), verified against the published SHA-256 checksums and cached in `~/.terranova/engines/<engine>/<version>/`.
+- `latest` is looked up at most once every 24 hours (the answer is kept in `~/.terranova/engines/<engine>/.latest.json`), so runs stay consistent and keep working offline with a previously installed version. `terraform` uses HashiCorp's checkpoint API; `opentofu` uses GitHub's releases API, which is rate-limited for unauthenticated requests — the 24-hour cache keeps that lookup rare.
 - With `plan` and `apply`, distinct versions are downloaded in parallel before any resource group runs.
 
 ```yaml
@@ -263,12 +263,12 @@ imports:
 ---
 version: "1.4"
 engine:
-  name: terraform # Only `terraform` is supported.
+  name: terraform # `terraform` or `opentofu`.
   version: "1.9.5" # Exact version, `latest` for the newest stable one, or `system` to use the `PATH` lookup.
 ```
 
 - Downloads are available for Linux, macOS and Windows (amd64 and arm64).
-- Runbooks of that resource group also get the pinned binary first on their `PATH`. Without an `engine` block, or with `system`, they keep the system `PATH`.
+- Runbooks of that resource group also get the pinned binary first on their `PATH`. Without an `engine` block, or with `system`, they keep the system `PATH` (looking up `terraform` or `tofu` depending on `engine.name`).
 
 ### How to run commands across resource groups in parallel.
 
