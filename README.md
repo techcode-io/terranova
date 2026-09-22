@@ -1,7 +1,7 @@
 <h1 align="center">Terranova</h1>
 
 <p align="center">
-  <i align="center">Terranova is a thin wrapper for Terraform that provides extra tools and logic to handle Terraform configurations at scale.</i>
+  <i align="center">Terranova is a thin wrapper for Terraform and OpenTofu that provides extra tools and logic to handle configurations at scale.</i>
 </p>
 
 > **Note**: This is a fork of [elastic/terranova](https://github.com/elastic/terranova) maintained and developed by [techcode.io](https://techcode.io).<br>
@@ -38,6 +38,7 @@
 - Ability to execute runbooks to interact with resources.
 - Ability to import variables between resource group.
 - Ability to run commands across resource groups in parallel, honoring dependency order.
+- Ability to pin either Terraform or OpenTofu as the engine, per resource group.
 
 ## :dart: Motivation
 
