@@ -251,6 +251,16 @@ imports:
     as: "<working_directory>" # Optional: Name of the input variable to map to.
 ```
 
+- A resource group can also import from itself (`from` pointing at its own path), so a
+  [runbook](#how-to-define-runbook) can consume the outputs of the group's own resulting
+  state - for example a post-apply smoke test or a bootstrap step. This self-import is only resolved when
+  the runbook actually runs, from the state that resulted from the group's own apply; it's never fed into
+  `plan`, `apply`, `destroy`, `taint`, `untaint` or `define` for that same group, since its own output
+  can't be resolved before (or during) its own apply. If the output isn't there yet (e.g. the group hasn't
+  been applied), the runbook fails with a clear error instead of hanging or crashing.
+- A cyclic `imports` chain between two or more distinct resource groups is still rejected with an error -
+  only a self-import is exempt.
+
 ### How to pin the terraform/OpenTofu version.
 
 - By default, `terraform` is looked up on the `PATH`.

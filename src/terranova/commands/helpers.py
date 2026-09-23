@@ -33,9 +33,15 @@ from terranova.exceptions import (
     GraphError,
     InvalidResourcesError,
     ManifestError,
+    SelfImportNotReadyError,
 )
 from terranova.executor import ResourceGroupResult, ResourceGroupTask, create_executor
-from terranova.graph import Wave, build_dependency_graph, compute_waves
+from terranova.graph import (
+    Wave,
+    build_dependency_graph,
+    compute_waves,
+    normalize_rel_path,
+)
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
@@ -318,8 +324,17 @@ def mount_context(
     # Import variables
     variables = None
     if import_vars:
+        # A self-import can't be resolved here: at `plan`/`apply` time this
+        # group's own state may not have the output yet (or may be about to
+        # change), so it's skipped - only `terranova runbook` resolves it,
+        # from the state that resulted from this group's own apply.
+        self_rel_path = normalize_rel_path(os.path.relpath(full_path, resources_dir))
         variables = extract_import_vars(
-            manifest, resources_dir, plugin_cache_dir, verbose
+            manifest,
+            resources_dir,
+            plugin_cache_dir,
+            verbose,
+            self_rel_path=self_rel_path,
         )
     # Cache hit when `EngineManager.prepare` already ran (plan/apply), so no download here
     engine_name = manifest.engine.name if manifest.engine else "terraform"
@@ -371,11 +386,29 @@ def extract_import_vars(
     resources_dir: Path,
     plugin_cache_dir: Path,
     verbose: bool = False,
+    *,
+    self_rel_path: str | None = None,
+    resolve_self: bool = False,
 ) -> dict[str, str]:
-    """Extract import variables from manifest."""
+    """
+    Extract import variables from manifest.
+
+    A self-import (`from` resolves to `self_rel_path`, the manifest's own resource
+    group) is only resolved when `resolve_self` is set - `terranova runbook` is the
+    only caller that passes it, since it runs after the group's own apply and can
+    read its resulting state. Every other caller (`plan`/`apply`/`destroy`/`taint`/
+    `untaint`/`define`, via `mount_context`) mounts the group before or during that
+    apply, where its own output can't be resolved yet, so such an import is skipped
+    instead of being resolved eagerly.
+    """
     variables: dict[str, str] = {}
     if manifest.imports:
         for importer in manifest.imports:
+            is_self_import = self_rel_path is not None and (
+                normalize_rel_path(importer.source) == self_rel_path
+            )
+            if is_self_import and not resolve_self:
+                continue
             target = importer.target if importer.target else importer.resource
             variables[target] = extract_output_var(
                 importer.source,
@@ -383,6 +416,7 @@ def extract_import_vars(
                 resources_dir,
                 plugin_cache_dir,
                 verbose,
+                is_self=is_self_import,
             )
     return variables
 
@@ -393,6 +427,8 @@ def extract_output_var(
     resources_dir: Path,
     plugin_cache_dir: Path,
     verbose: bool = False,
+    *,
+    is_self: bool = False,
 ) -> str:
     """Show output values from your root module."""
     # Construct resources path
@@ -405,6 +441,8 @@ def extract_output_var(
     try:
         return terraform.output(name)
     except ErrorReturnCode as err:
+        if is_self:
+            raise SelfImportNotReadyError(path, name) from err
         raise Exit(code=err.exit_code) from err
 
 

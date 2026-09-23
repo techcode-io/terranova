@@ -166,6 +166,41 @@ class TestBuildDependencyGraph:
         assert graph.depends_on["consumer"] == set()
         assert compute_waves(graph) == [["consumer"]]
 
+    def test_self_import_creates_no_edge(self, resources_dir: Path) -> None:
+        """A group importing from itself is accepted and runs in a single wave."""
+        dir_a, rel_a = _write_manifest_dir(
+            resources_dir, "group_a", _manifest_with_imports("group_a")
+        )
+        paths = [(dir_a, rel_a)]
+        manifests = {
+            rel_path: ResourcesManifest.from_file(full_path / "manifest.yml")
+            for full_path, rel_path in paths
+        }
+        graph = build_dependency_graph(paths, manifests)
+        assert graph.depends_on["group_a"] == set()
+        assert graph.edge_imports == {}
+        assert compute_waves(graph) == [["group_a"]]
+
+    def test_self_import_does_not_mask_multi_group_cycle(
+        self, resources_dir: Path
+    ) -> None:
+        """A self-import alongside a genuine cross-group cycle still gets rejected."""
+        dir_a, rel_a = _write_manifest_dir(
+            resources_dir, "group_a", _manifest_with_imports("group_a", "group_b")
+        )
+        dir_b, rel_b = _write_manifest_dir(
+            resources_dir, "group_b", _manifest_with_imports("group_a")
+        )
+        paths = [(dir_a, rel_a), (dir_b, rel_b)]
+        manifests = {
+            rel_path: ResourcesManifest.from_file(full_path / "manifest.yml")
+            for full_path, rel_path in paths
+        }
+        graph = build_dependency_graph(paths, manifests)
+        assert graph.depends_on["group_a"] == {"group_b"}
+        with pytest.raises(CyclicImportError):
+            compute_waves(graph)
+
 
 class TestCyclicImportDetails:
     def test_two_group_cycle_names_the_imports(self, resources_dir: Path) -> None:

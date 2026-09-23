@@ -29,7 +29,9 @@ from terranova.exceptions import (
     EngineError,
     MissingRunbookEnvError,
     MissingRunbookError,
+    SelfImportNotReadyError,
 )
+from terranova.graph import normalize_rel_path
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
 
@@ -55,13 +57,20 @@ def runbook(ctx: AppContext, path: str, name: str) -> None:
     if len(matching_runbooks) > 1:
         log.fatal("execute runbook", AmbiguousRunbookError(name))
 
-    # Import vars
-    import_vars = extract_import_vars(
-        manifest,
-        ctx.resources_dir,
-        ctx.terraform_shared_plugin_cache_dir,
-        ctx.verbose,
-    )
+    # Import vars - a runbook runs after its own resource group's apply, so
+    # unlike `plan`/`apply`/etc. it can resolve a self-import from that
+    # resulting state instead of skipping it.
+    try:
+        import_vars = extract_import_vars(
+            manifest,
+            ctx.resources_dir,
+            ctx.terraform_shared_plugin_cache_dir,
+            ctx.verbose,
+            self_rel_path=normalize_rel_path(path),
+            resolve_self=True,
+        )
+    except SelfImportNotReadyError as err:
+        log.fatal("resolve self-import", err)
 
     # Resolve the pinned engine so runbooks see the same binary as the group
     engine_name = manifest.engine.name if manifest.engine else "terraform"

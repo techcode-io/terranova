@@ -23,6 +23,7 @@ from terranova.commands.helpers import (
     resolve_resource_dirs,
     resource_dirs,
 )
+from terranova.exceptions import SelfImportNotReadyError
 from terranova.resources import (
     ResourcesImport,
     ResourcesManifest,
@@ -273,6 +274,39 @@ class TestMountContext:
         terraform.graph()
         assert fake_terraform_bin.captured_env["TF_VAR_input_var"] == "chained-value"
 
+    def test_self_import_is_skipped_not_resolved(
+        self,
+        tmp_path: Path,
+        fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+    ) -> None:
+        """
+        `plan`/`apply`/etc. mount a group before (or during) its own apply, so a
+        self-import can't be resolved yet - it's skipped rather than attempted,
+        unlike `terranova runbook` (see `TestExtractImportVars`).
+        """
+        group_dir = tmp_path / "resources" / "group_a"
+        group_dir.mkdir(parents=True)
+        manifest = ResourcesManifest(
+            metadata=ResourcesMetadata(name="group_a", description="d"),
+            imports=[
+                ResourcesImport(
+                    source="group_a", resource="some_output", target="input_var"
+                )
+            ],
+        )
+        fake_terraform_bin.set_stdout("should-not-be-used")
+        terraform = mount_context(
+            group_dir,
+            resources_dir,
+            plugin_cache_dir,
+            manifest=manifest,
+            import_vars=True,
+        )
+        terraform.graph()
+        assert "TF_VAR_input_var" not in fake_terraform_bin.captured_env
+
 
 class TestExtractImportVars:
     def test_empty_when_no_imports(
@@ -336,6 +370,72 @@ class TestExtractImportVars:
         )
         result = extract_import_vars(manifest, resources_dir, plugin_cache_dir)
         assert result == {"foo": "val", "bar": "val"}
+
+    def test_self_import_skipped_by_default(
+        self,
+        tmp_path: Path,
+        fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        manifest = ResourcesManifest(
+            metadata=ResourcesMetadata(name="group_a", description="d"),
+            imports=[ResourcesImport(source="group_a", resource="foo")],
+        )
+        result = extract_import_vars(
+            manifest, resources_dir, plugin_cache_dir, self_rel_path="group_a"
+        )
+        assert result == {}
+        assert not fake_terraform_bin.was_invoked
+
+    def test_self_import_resolved_when_resolve_self_true(
+        self,
+        tmp_path: Path,
+        fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+    ) -> None:
+        """`terranova runbook` resolves a self-import from the group's own state."""
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        fake_terraform_bin.set_stdout("own-value")
+        manifest = ResourcesManifest(
+            metadata=ResourcesMetadata(name="group_a", description="d"),
+            imports=[ResourcesImport(source="group_a", resource="foo")],
+        )
+        result = extract_import_vars(
+            manifest,
+            resources_dir,
+            plugin_cache_dir,
+            self_rel_path="group_a",
+            resolve_self=True,
+        )
+        assert result == {"foo": "own-value"}
+
+    def test_self_import_not_ready_raises_explained_error(
+        self,
+        tmp_path: Path,
+        fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+    ) -> None:
+        """A self-import whose output isn't there yet fails with a clear error."""
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        fake_terraform_bin.set_exit_code(1)
+        manifest = ResourcesManifest(
+            metadata=ResourcesMetadata(name="group_a", description="d"),
+            imports=[ResourcesImport(source="group_a", resource="foo")],
+        )
+        with pytest.raises(SelfImportNotReadyError) as exc_info:
+            extract_import_vars(
+                manifest,
+                resources_dir,
+                plugin_cache_dir,
+                self_rel_path="group_a",
+                resolve_self=True,
+            )
+        assert "group_a" in exc_info.value.cause
+        assert "foo" in exc_info.value.cause
 
 
 class TestExtractOutputVar:
