@@ -1,6 +1,6 @@
 name: "terranova"
 arch: "arm64"
-version: "0.9.0"
+version: "0.9.1-dev"
 section: "default"
 priority: "extra"
 maintainer: "Adrien Mannocci <adrien.mannocci@gmail.com>"
