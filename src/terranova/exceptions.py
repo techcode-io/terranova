@@ -253,3 +253,17 @@ class MissingRunbookEnvError(RunbookError):
             cause=f"The environment variable `{env_name}` isn't defined.",
             resolution="Ensure the environment variable is defined before running the runbook.",
         )
+
+
+class SelfImportNotReadyError(RunbookError):
+    """Represents a self-import whose output isn't available yet when a runbook runs."""
+
+    def __init__(self, rel_path: str, resource: str) -> None:
+        """Init self-import not ready error."""
+        super().__init__(
+            cause=(
+                f"The self-import of `{resource}` from `{rel_path}` has no output "
+                "in its current state."
+            ),
+            resolution=f"Run `terranova apply {rel_path}` first so the output exists.",
+        )

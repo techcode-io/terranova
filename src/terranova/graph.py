@@ -59,6 +59,11 @@ def build_dependency_graph(
     import from a resource group outside of it that was applied by an earlier,
     separate invocation - there's nothing to order it against in *this* run.
 
+    An import whose source is the importing resource group itself (a self-import)
+    is likewise not turned into an edge: a group is always applied before its own
+    runbooks run, so there's nothing to order it against either. See
+    `extract_import_vars()` for how such an import's value actually gets resolved.
+
     Args:
         paths: discovered resource dirs, as returned by `resource_dirs()`.
         manifests: manifests already parsed for each rel_path in `paths`.
@@ -78,6 +83,11 @@ def build_dependency_graph(
             continue
         for importer in manifest.imports:
             source = normalize_rel_path(importer.source)
+            if source == node:
+                # A self-import is satisfied by this group's own apply, not by
+                # another group - skip it instead of adding a self-loop edge,
+                # which `TopologicalSorter` would otherwise reject as a cycle.
+                continue
             if source in nodes:
                 depends_on[node].add(source)
                 edge_imports[(node, source)] = importer
