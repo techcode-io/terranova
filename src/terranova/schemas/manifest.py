@@ -17,6 +17,7 @@
 """Marshmallow schemas used to validate resources manifests, one per supported version."""
 
 from types import MappingProxyType
+from typing import Final
 
 from marshmallow import EXCLUDE, Schema, fields, validate
 
@@ -151,3 +152,6 @@ MANIFEST_SCHEMAS: MappingProxyType[str, type[Schema]] = MappingProxyType(
         "1.4": ManifestSchemaV1_4,
     }
 )
+
+LATEST_MANIFEST_VERSION: Final[str] = next(reversed(MANIFEST_SCHEMAS))
+"""Most recent manifest version (the last registered one)."""

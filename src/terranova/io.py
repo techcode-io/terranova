@@ -14,8 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+import tempfile
 from collections.abc import Sequence
 from contextlib import suppress
+from pathlib import Path
 from typing import Protocol
 
 
@@ -35,3 +38,25 @@ def close(files: Sequence[Closeable]) -> None:
     for file in files:
         with suppress(OSError):
             file.close()
+
+
+def write_atomic(path: Path, content: str) -> None:
+    """
+    Replace an existing file with `content` atomically, keeping its permissions.
+
+    The content is written to a temporary file next to `path`, then moved over
+    it, so readers never see a partially written file.
+
+    Args:
+        path: existing file to replace.
+        content: new UTF-8 text content.
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            tmp.write(content)
+        os.chmod(tmp_name, path.stat().st_mode & 0o7777)
+        os.replace(tmp_name, path)
+    except BaseException:
+        os.unlink(tmp_name)
+        raise

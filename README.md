@@ -281,6 +281,14 @@ engine:
 - Downloads are available for Linux, macOS and Windows (amd64 and arm64).
 - Runbooks of that resource group also get the pinned binary first on their `PATH`. Without an `engine` block, or with `system`, they keep the system `PATH` (looking up `terraform` or `tofu` depending on `engine.name`).
 
+### How to migrate manifests to the latest version.
+
+- `terranova migrate [path] [--dry-run] [--auto-scope]` upgrades every `manifest.yml` under the conf dir (or under `path`, or those touched by the current git diff with `-A`) to the latest manifest version in one run.
+- Comments, key order and quoting are preserved. A manifest is validated before and after the rewrite, and an invalid one is reported and left untouched while the others are still migrated (the command then exits with code 1).
+- Manifests already at the latest version are skipped, so the command is safe to re-run.
+- Manifests older than 1.4 have no `engine` block. When at least one needs it, `migrate` asks once which one to add for all of them: `terraform` or `opentofu` (or `skip` to add none), then `system` (the default), `latest` or an exact version. Without an interactive terminal the defaults (`terraform` / `system`) are used. An existing `engine` block is never changed.
+- `--dry-run` reports what would change without writing anything.
+
 ### How to manage cached engine versions.
 
 - `terranova runtime ls [--engine terraform|opentofu]` lists the versions cached under `~/.terranova/engines/`, their size on disk, and whether a manifest under the conf dir still pins them.
