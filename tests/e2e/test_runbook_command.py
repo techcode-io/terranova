@@ -14,31 +14,104 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
+import sys
 from pathlib import Path
-from typing import Final
 
 import pytest
 from click.testing import CliRunner
 
 from terranova.cli import main
-from tests import PROJECT_TESTS_FIXTURES_DIR
 from tests.e2e.conftest import assert_result
 
-pytestmark = pytest.mark.posix_only  # fixtures are `.sh` entrypoints
+_MANIFEST_HEADER = """\
+version: "1.3"
 
-RUNBOOK_ERRORS_FIXTURE_DIR: Final[Path] = PROJECT_TESTS_FIXTURES_DIR / "runbook_errors"
+metadata:
+  name: Runbook Test
+  description: Test resources for the runbook command
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com
+
+runbooks:
+"""
+
+
+def _runbook_conf_dir(root: Path, runbooks: str, scripts: dict[str, str]) -> Path:
+    """
+    Build a conf dir whose runbooks run `scripts` through the current interpreter.
+
+    Entrypoints are python scripts rather than shell ones, so they run on every OS.
+    """
+    group_dir = root / "resources" / "resource_group"
+    runbooks_dir = group_dir / "runbooks"
+    runbooks_dir.mkdir(parents=True)
+    for name, body in scripts.items():
+        (runbooks_dir / name).write_text(body)
+    entrypoint = json.dumps(sys.executable)  # a JSON string is a valid YAML scalar
+    (group_dir / "manifest.yml").write_text(
+        _MANIFEST_HEADER + runbooks.replace("{python}", entrypoint)
+    )
+    return root
+
+
+@pytest.fixture
+def errors_conf_dir(tmp_path: Path) -> Path:
+    return _runbook_conf_dir(
+        tmp_path,
+        """\
+  - name: duplicate
+    entrypoint: {python}
+    args: [ok.py]
+  - name: duplicate
+    entrypoint: {python}
+    args: [ok.py]
+  - name: needs-env
+    entrypoint: {python}
+    args: [ok.py]
+    env:
+      - name: REQUIRED_VAR
+  - name: fails
+    entrypoint: {python}
+    args: [fail.py]
+""",
+        {
+            "ok.py": 'print("ok")\n',
+            "fail.py": 'import sys\nprint("failing", file=sys.stderr)\nsys.exit(3)\n',
+        },
+    )
+
+
+@pytest.fixture
+def is_defined_conf_dir(tmp_path: Path) -> Path:
+    return _runbook_conf_dir(
+        tmp_path,
+        """\
+  - name: check-optional-env
+    entrypoint: {python}
+    args: [runbook.py]
+    env:
+      - name: OPTIONAL_VAR
+        if: is_defined
+""",
+        {
+            "runbook.py": (
+                "import os\n"
+                'print("OPTIONAL_VAR=" + os.environ.get("OPTIONAL_VAR", ""))\n'
+            )
+        },
+    )
 
 
 def test_runbook_with_env_if_is_defined_when_var_is_not_set(
-    runner: CliRunner,
+    runner: CliRunner, is_defined_conf_dir: Path
 ) -> None:
     """Test that runbook with if: is_defined condition succeeds when env var is not set."""
-    fixture_conf_dir = PROJECT_TESTS_FIXTURES_DIR / "runbook_with_is_defined"
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(fixture_conf_dir),
+            str(is_defined_conf_dir),
             "runbook",
             "resource_group",
             "check-optional-env",
@@ -48,14 +121,15 @@ def test_runbook_with_env_if_is_defined_when_var_is_not_set(
     assert "OPTIONAL_VAR=" in stdout
 
 
-def test_runbook_with_env_if_is_defined_when_var_is_set(runner: CliRunner) -> None:
+def test_runbook_with_env_if_is_defined_when_var_is_set(
+    runner: CliRunner, is_defined_conf_dir: Path
+) -> None:
     """Test that runbook with if: is_defined condition receives env var when set."""
-    fixture_conf_dir = PROJECT_TESTS_FIXTURES_DIR / "runbook_with_is_defined"
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(fixture_conf_dir),
+            str(is_defined_conf_dir),
             "runbook",
             "resource_group",
             "check-optional-env",
@@ -66,13 +140,13 @@ def test_runbook_with_env_if_is_defined_when_var_is_set(runner: CliRunner) -> No
     assert "OPTIONAL_VAR=test_value" in stdout
 
 
-def test_runbook_missing_name_fails(runner: CliRunner) -> None:
+def test_runbook_missing_name_fails(runner: CliRunner, errors_conf_dir: Path) -> None:
     """Test that requesting an undefined runbook name reports a fatal error."""
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(RUNBOOK_ERRORS_FIXTURE_DIR),
+            str(errors_conf_dir),
             "runbook",
             "resource_group",
             "does-not-exist",
@@ -82,13 +156,13 @@ def test_runbook_missing_name_fails(runner: CliRunner) -> None:
     assert "isn't defined" in result.stderr
 
 
-def test_runbook_ambiguous_name_fails(runner: CliRunner) -> None:
+def test_runbook_ambiguous_name_fails(runner: CliRunner, errors_conf_dir: Path) -> None:
     """Test that a runbook name matching multiple entries reports a fatal error."""
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(RUNBOOK_ERRORS_FIXTURE_DIR),
+            str(errors_conf_dir),
             "runbook",
             "resource_group",
             "duplicate",
@@ -98,13 +172,15 @@ def test_runbook_ambiguous_name_fails(runner: CliRunner) -> None:
     assert "ambiguous" in result.stderr
 
 
-def test_runbook_missing_required_env_fails(runner: CliRunner) -> None:
+def test_runbook_missing_required_env_fails(
+    runner: CliRunner, errors_conf_dir: Path
+) -> None:
     """Test that a required, undefined runbook env var reports a fatal error."""
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(RUNBOOK_ERRORS_FIXTURE_DIR),
+            str(errors_conf_dir),
             "runbook",
             "resource_group",
             "needs-env",
@@ -114,13 +190,15 @@ def test_runbook_missing_required_env_fails(runner: CliRunner) -> None:
     assert "REQUIRED_VAR" in result.stderr
 
 
-def test_runbook_with_required_env_set_succeeds(runner: CliRunner) -> None:
+def test_runbook_with_required_env_set_succeeds(
+    runner: CliRunner, errors_conf_dir: Path
+) -> None:
     """Test that supplying the required env var lets the runbook execute."""
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(RUNBOOK_ERRORS_FIXTURE_DIR),
+            str(errors_conf_dir),
             "runbook",
             "resource_group",
             "needs-env",
@@ -131,13 +209,15 @@ def test_runbook_with_required_env_set_succeeds(runner: CliRunner) -> None:
     assert "ok" in stdout
 
 
-def test_runbook_failure_propagates_exit_code(runner: CliRunner) -> None:
+def test_runbook_failure_propagates_exit_code(
+    runner: CliRunner, errors_conf_dir: Path
+) -> None:
     """Test that a runbook exiting with a non-zero code propagates that exit code."""
     result = runner.invoke(
         main,
         args=[
             "--conf-dir",
-            str(RUNBOOK_ERRORS_FIXTURE_DIR),
+            str(errors_conf_dir),
             "runbook",
             "resource_group",
             "fails",

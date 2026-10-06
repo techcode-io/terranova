@@ -35,7 +35,7 @@ from terranova.exceptions import (
     UnreadableManifestError,
     VersionManifestError,
 )
-from terranova.process import Command, PathCmd
+from terranova.process import Command, PathCmd, platform_env_vars
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
 from terranova.utils import Constants, serde
 
@@ -103,6 +103,7 @@ class ResourcesRunbook:
         `None` keeps the system `PATH` untouched.
         """
         env = {
+            **platform_env_vars(),
             "TERRANOVA_PATH": path,
             "TERRANOVA_CONF_DIR": conf_dir.absolute().as_posix(),
             "TERRANOVA_RUNBOOK_NAME": self.name,

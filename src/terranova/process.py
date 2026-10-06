@@ -105,6 +105,30 @@ def strip_redirect(log_fn: Callable[[str], None]) -> Callable[[str], None]:
     return lambda line: log_fn(line.rstrip("\n"))
 
 
+# Variables Windows processes need to initialise (sockets, DNS, temp files, executable lookup);
+# without them terraform or a python entrypoint fails to start. `HOME` has no meaning there,
+# `USERPROFILE` replaces it.
+WINDOWS_ENV_VARS: tuple[str, ...] = (
+    "APPDATA",
+    "COMSPEC",
+    "LOCALAPPDATA",
+    "PATHEXT",
+    "PROGRAMDATA",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+)
+
+
+def platform_env_vars() -> dict[str, str]:
+    """Variables a child process needs to start on this OS, taken from the current one."""
+    if os.name != "nt":
+        return {}
+    return {k: v for k in WINDOWS_ENV_VARS if (v := os.environ.get(k)) is not None}
+
+
 class EnvCmd:
     """Convenient environment variables builder for command."""
 

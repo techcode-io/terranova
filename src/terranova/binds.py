@@ -24,23 +24,16 @@ from typing import Final, cast, override
 from terranova.engines import ENGINE_DESCRIPTORS
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
-from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
+from terranova.process import (
+    WINDOWS_ENV_VARS,
+    Bind,
+    Command,
+    CommandNotFound,
+    EnvCmd,
+    ErrorReturnCode,
+)
 from terranova.utils import int_or_default, log, str_or_none
 
-# Variables Windows processes need to initialise (sockets, DNS, temp files, executable lookup);
-# without them terraform fails to start. `HOME` has no meaning there, `USERPROFILE` replaces it.
-_WINDOWS_ENV_VARS: Final[tuple[str, ...]] = (
-    "APPDATA",
-    "COMSPEC",
-    "LOCALAPPDATA",
-    "PATHEXT",
-    "PROGRAMDATA",
-    "SYSTEMDRIVE",
-    "SYSTEMROOT",
-    "TEMP",
-    "TMP",
-    "USERPROFILE",
-)
 _DIAGNOSTIC_RULE: Final[str] = "─" * 60
 _MAX_FALLBACK_DIAGNOSTIC_LENGTH: Final[int] = 4000
 # Glyph/style for each terraform `change.action` worth showing in a resource-level
@@ -347,7 +340,7 @@ class Terraform(Bind):
             "GOOGLE_GHA_CREDS_PATH",
             "HOME",
             "PATH",
-            *(_WINDOWS_ENV_VARS if os.name == "nt" else ()),
+            *(WINDOWS_ENV_VARS if os.name == "nt" else ()),
         )
 
         # Predicate for allowed env vars

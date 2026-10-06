@@ -21,6 +21,16 @@ from terranova.process import (
     TimeoutException,
 )
 
+PYTHON = sys.executable
+_ECHO = "import sys; print(sys.argv[1])"
+_ECHO_ERR = "import sys; print(sys.argv[1], file=sys.stderr)"
+_CAT = "import sys; sys.stdout.write(sys.stdin.read())"
+
+
+def py(code: str, *args: str) -> Command:
+    """A command running `code` with the current interpreter, so it works on every OS."""
+    return Command(PYTHON).args("-c", code, *args)
+
 
 class TestEnvCmd:
     def test_empty(self) -> None:
@@ -87,7 +97,6 @@ class TestPathCmd:
         assert parts[0] == "/custom/bin"
 
 
-@pytest.mark.posix_only
 class TestCommand:
     def test_not_found_raises(self) -> None:
         with pytest.raises(CommandNotFound) as exc_info:
@@ -96,26 +105,26 @@ class TestCommand:
         assert "__no_such_binary_exists__" in str(exc_info.value)
 
     def test_binary_path(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.binary_path().is_absolute()
-        assert cmd.binary_path().name == "echo"
+        assert cmd.binary_path().name == Path(PYTHON).name
 
     def test_args_getter_returns_empty_tuple_by_default(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.args() == ()
 
     def test_args_setter_and_getter(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.args("hello", "world")
         assert returned is cmd
         assert cmd.args() == ("hello", "world")
 
     def test_env_getter_returns_empty_dict_by_default(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.env() == {}
 
     def test_env_setter_and_getter(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.env({"FOO": "bar"})
         assert returned is cmd
         assert cmd.env() == {"FOO": "bar"}
@@ -123,54 +132,54 @@ class TestCommand:
         assert "EXTRA" not in cmd.env()
 
     def test_cwd_getter_returns_cwd(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.cwd() == Path.cwd()
 
     def test_cwd_setter_and_getter(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         new_cwd = Path("/tmp")
         returned = cmd.cwd(new_cwd)
         assert returned is cmd
         assert cmd.cwd() == new_cwd
 
     def test_stdin_getter_returns_none_by_default(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.stdin() is None
 
     def test_stdin_setter(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.stdin("some input")
         assert returned is cmd
         assert cmd.stdin() == "some input"
 
     def test_stdout_getter_returns_none_by_default(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.stdout() is None
 
     def test_stdout_setter_callable(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         callback: Callable[[str], None] = lambda _: None
         cmd.stdout(callback)
         assert cmd.stdout() is callback
 
     def test_stdout_setter_path_is_absolutized(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         relative = Path("output.txt")
         cmd.stdout(relative)
         assert cmd.stdout() == relative.absolute()
 
     def test_stderr_getter_returns_none_by_default(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         assert cmd.stderr() is None
 
     def test_stderr_setter_path_is_absolutized(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         relative = Path("error.txt")
         cmd.stderr(relative)
         assert cmd.stderr() == relative.absolute()
 
     def test_inherit_sets_all_streams(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.inherit()
         assert returned is cmd
         assert cmd.stdin() is sys.stdin
@@ -178,21 +187,21 @@ class TestCommand:
         assert cmd.stderr() is sys.stderr
 
     def test_inherit_out_sets_stdout_stderr(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.inherit_out()
         assert returned is cmd
         assert cmd.stdout() is sys.stdout
         assert cmd.stderr() is sys.stderr
 
     def test_timeout_setter(self) -> None:
-        cmd = Command("echo")
+        cmd = Command(PYTHON)
         returned = cmd.timeout(30)
         assert returned is cmd
 
     def test_copy_from_another_command(self) -> None:
-        src = Command("echo")
+        src = Command(PYTHON)
         src.args("hello").env({"X": "1"}).cwd(Path("/tmp")).timeout(10)
-        dst = Command("echo")
+        dst = Command(PYTHON)
         returned = dst.copy(src)
         assert returned is dst
         assert dst.args() == ("hello",)
@@ -200,16 +209,16 @@ class TestCommand:
         assert dst.cwd() == Path("/tmp")
 
     def test_exec_success(self) -> None:
-        cmd = Command("echo").args("hello")
+        cmd = py(_ECHO, "hello")
         process = cmd.exec()
         assert process.returncode == 0
 
     def test_exec_raises_error_return_code(self) -> None:
-        cmd = Command("false")
+        cmd = py("import sys; sys.exit(1)")
         with pytest.raises(ErrorReturnCode) as exc_info:
             cmd.exec()
         assert exc_info.value.exit_code != 0
-        assert "false" in exc_info.value.cmd
+        assert "sys.exit" in exc_info.value.cmd
 
     def test_error_return_code_properties(self) -> None:
         err = ErrorReturnCode(cmd="mycmd", exit_code=42)
@@ -219,11 +228,11 @@ class TestCommand:
         assert "42" in str(err)
 
     def test_exec_raises_timeout_exception(self) -> None:
-        cmd = Command("sleep").args("10").timeout(1)
+        cmd = py("import time; time.sleep(10)").timeout(1)
         with pytest.raises(TimeoutException) as exc_info:
             cmd.exec()
         assert exc_info.value.timeout == 1
-        assert "sleep" in exc_info.value.cmd
+        assert "time.sleep" in exc_info.value.cmd
 
     def test_timeout_exception_properties(self) -> None:
         err = TimeoutException(cmd="mycmd", timeout=5.0)
@@ -233,7 +242,7 @@ class TestCommand:
         assert "5.0" in str(err)
 
     def test_exec_no_wait_returns_running_process(self) -> None:
-        cmd = Command("sleep").args("5")
+        cmd = py("import time; time.sleep(5)")
         process = cmd.exec(wait_completion=False)
         assert process.returncode is None
         process.terminate()
@@ -241,42 +250,42 @@ class TestCommand:
 
     def test_exec_stdout_to_callable(self) -> None:
         lines: list[str] = []
-        cmd = Command("echo").args("hello world")
+        cmd = py(_ECHO, "hello world")
         cmd.stdout(lines.append)
         cmd.exec()
         assert any("hello world" in line for line in lines)
 
     def test_exec_stderr_to_callable(self) -> None:
         lines: list[str] = []
-        cmd = Command("sh").args("-c", "echo error >&2")
+        cmd = py(_ECHO_ERR, "error")
         cmd.stderr(lines.append)
         cmd.exec()
         assert any("error" in line for line in lines)
 
     def test_exec_stdout_to_stringio(self) -> None:
         buf = StringIO()
-        cmd = Command("echo").args("captured")
+        cmd = py(_ECHO, "captured")
         cmd.stdout(buf)
         cmd.exec()
         assert "captured" in buf.getvalue()
 
     def test_exec_stdout_to_file(self, tmp_path: Path) -> None:
         out_file = tmp_path / "out.txt"
-        cmd = Command("echo").args("file output")
+        cmd = py(_ECHO, "file output")
         cmd.stdout(out_file)
         cmd.exec()
         assert "file output" in out_file.read_text()
 
     def test_exec_stderr_to_file(self, tmp_path: Path) -> None:
         err_file = tmp_path / "err.txt"
-        cmd = Command("sh").args("-c", "echo err_content >&2")
+        cmd = py(_ECHO_ERR, "err_content")
         cmd.stderr(err_file)
         cmd.exec()
         assert "err_content" in err_file.read_text()
 
     def test_exec_stdin_from_string(self) -> None:
         lines: list[str] = []
-        cmd = Command("cat")
+        cmd = py(_CAT)
         cmd.stdin("hello from stdin\n")
         cmd.stdout(lines.append)
         cmd.exec()
@@ -288,7 +297,7 @@ class TestCommand:
         q.put("line1\n")
         q.put("line2\n")
         q.put(None)
-        cmd = Command("cat")
+        cmd = py(_CAT)
         cmd.stdin(q)
         cmd.stdout(lines.append)
         cmd.exec()
@@ -298,7 +307,7 @@ class TestCommand:
     def test_exec_with_env(self) -> None:
         lines: list[str] = []
         env = EnvCmd.inherit().add({"MY_TEST_VAR": "my_value"}).build()
-        cmd = Command("sh").args("-c", "echo $MY_TEST_VAR")
+        cmd = py("import os; print(os.environ['MY_TEST_VAR'])")
         cmd.env(env)
         cmd.stdout(lines.append)
         cmd.exec()
@@ -306,11 +315,15 @@ class TestCommand:
 
     def test_exec_with_cwd(self, tmp_path: Path) -> None:
         lines: list[str] = []
-        cmd = Command("pwd")
+        cmd = py("import os; print(os.getcwd())")
         cmd.cwd(tmp_path)
         cmd.stdout(lines.append)
         cmd.exec()
-        assert any(str(tmp_path) in line for line in lines)
+        assert any(
+            Path(line.strip()).resolve() == tmp_path.resolve()
+            for line in lines
+            if line.strip()
+        )
 
     def test_exec_command_not_found_from_path(self) -> None:
         with pytest.raises(CommandNotFound):
@@ -318,7 +331,7 @@ class TestCommand:
 
     def test_aexec_success(self) -> None:
         async def run() -> None:
-            cmd = Command("echo").args("async hello")
+            cmd = py(_ECHO, "async hello")
             process = await cmd.aexec()
             assert process.returncode == 0
 
@@ -326,7 +339,7 @@ class TestCommand:
 
     def test_aexec_raises_error_return_code(self) -> None:
         async def run() -> None:
-            cmd = Command("false")
+            cmd = py("import sys; sys.exit(1)")
             with pytest.raises(ErrorReturnCode):
                 await cmd.aexec()
 
@@ -334,7 +347,7 @@ class TestCommand:
 
     def test_aexec_raises_timeout_exception(self) -> None:
         async def run() -> None:
-            cmd = Command("sleep").args("10").timeout(1)
+            cmd = py("import time; time.sleep(10)").timeout(1)
             with pytest.raises(TimeoutException):
                 await cmd.aexec()
 
@@ -342,7 +355,7 @@ class TestCommand:
 
     def test_aexec_no_wait_returns_running_process(self) -> None:
         async def run() -> None:
-            cmd = Command("sleep").args("5")
+            cmd = py("import time; time.sleep(5)")
             process = await cmd.aexec(wait_completion=False)
             assert process.returncode is None
             process.terminate()
@@ -353,7 +366,7 @@ class TestCommand:
     def test_aexec_stdout_to_callable(self) -> None:
         async def run() -> list[str]:
             lines: list[str] = []
-            cmd = Command("echo").args("async output")
+            cmd = py(_ECHO, "async output")
             cmd.stdout(lines.append)
             await cmd.aexec()
             return lines
@@ -364,7 +377,7 @@ class TestCommand:
     def test_aexec_stderr_to_callable(self) -> None:
         async def run() -> list[str]:
             lines: list[str] = []
-            cmd = Command("sh").args("-c", "echo async_err >&2")
+            cmd = py(_ECHO_ERR, "async_err")
             cmd.stderr(lines.append)
             await cmd.aexec()
             return lines
@@ -375,7 +388,7 @@ class TestCommand:
     def test_aexec_stdout_to_stringio(self) -> None:
         async def run() -> str:
             buf = StringIO()
-            cmd = Command("echo").args("async captured")
+            cmd = py(_ECHO, "async captured")
             cmd.stdout(buf)
             await cmd.aexec()
             return buf.getvalue()
@@ -386,7 +399,7 @@ class TestCommand:
     def test_aexec_stdout_to_file(self, tmp_path: Path) -> None:
         async def run() -> None:
             out_file = tmp_path / "async_out.txt"
-            cmd = Command("echo").args("async file output")
+            cmd = py(_ECHO, "async file output")
             cmd.stdout(out_file)
             await cmd.aexec()
             assert "async file output" in out_file.read_text()
@@ -396,7 +409,7 @@ class TestCommand:
     def test_aexec_stdin_from_string(self) -> None:
         async def run() -> list[str]:
             lines: list[str] = []
-            cmd = Command("cat")
+            cmd = py(_CAT)
             cmd.stdin("async stdin\n")
             cmd.stdout(lines.append)
             await cmd.aexec()
@@ -412,7 +425,7 @@ class TestCommand:
             q.put_nowait("async_line1\n")
             q.put_nowait("async_line2\n")
             q.put_nowait(None)
-            cmd = Command("cat")
+            cmd = py(_CAT)
             cmd.stdin(q)
             cmd.stdout(lines.append)
             await cmd.aexec()
@@ -426,7 +439,7 @@ class TestCommand:
         async def run() -> list[str]:
             lines: list[str] = []
             env = EnvCmd.inherit().add({"ASYNC_VAR": "async_val"}).build()
-            cmd = Command("sh").args("-c", "echo $ASYNC_VAR")
+            cmd = py("import os; print(os.environ['ASYNC_VAR'])")
             cmd.env(env)
             cmd.stdout(lines.append)
             await cmd.aexec()
@@ -438,20 +451,23 @@ class TestCommand:
     def test_aexec_with_cwd(self, tmp_path: Path) -> None:
         async def run() -> list[str]:
             lines: list[str] = []
-            cmd = Command("pwd")
+            cmd = py("import os; print(os.getcwd())")
             cmd.cwd(tmp_path)
             cmd.stdout(lines.append)
             await cmd.aexec()
             return lines
 
         lines = asyncio.run(run())
-        assert any(str(tmp_path) in line for line in lines)
+        assert any(
+            Path(line.strip()).resolve() == tmp_path.resolve()
+            for line in lines
+            if line.strip()
+        )
 
 
-@pytest.mark.posix_only
 class TestBind:
     def _make_bind(self) -> Bind:
-        return Bind("echo")
+        return Bind(PYTHON)
 
     def test_command_not_found(self) -> None:
         with pytest.raises(CommandNotFound):
@@ -459,7 +475,7 @@ class TestBind:
 
     def test_binary_path(self) -> None:
         b = self._make_bind()
-        assert b.binary_path().name == "echo"
+        assert b.binary_path().name == Path(PYTHON).name
 
     def test_env_getter(self) -> None:
         b = self._make_bind()
@@ -512,7 +528,7 @@ class TestBind:
         assert returned is b
 
     def test_copy_chaining(self) -> None:
-        src_cmd = Command("echo")
+        src_cmd = Command(PYTHON)
         src_cmd.args("hi").env({"X": "1"})
         b = self._make_bind()
         returned = b.copy(src_cmd)
@@ -520,5 +536,5 @@ class TestBind:
 
     def test_create_returns_command(self) -> None:
         b = self._make_bind()
-        cmd = b.create("echo")
+        cmd = b.create(PYTHON)
         assert isinstance(cmd, Command)
