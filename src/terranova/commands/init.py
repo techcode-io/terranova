@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+from pathlib import Path
 
 import click
 from click.exceptions import Exit
@@ -150,7 +151,11 @@ def init(
                 manifest=manifest,
             )
             terraform.init(
-                backend_config={"key": os.path.relpath(full_path, ctx.resources_dir)},
+                backend_config={
+                    "key": Path(
+                        os.path.relpath(full_path, ctx.resources_dir)
+                    ).as_posix()
+                },
                 migrate_state=migrate_state,
                 no_backend=no_backend,
                 reconfigure=reconfigure,

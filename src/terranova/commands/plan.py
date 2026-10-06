@@ -78,7 +78,12 @@ class _PlanTask(TerraformTask):
         terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._out:
-            with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
+            # Closed (but kept) before terraform runs: Windows forbids opening a file that
+            # another handle holds open. It is still removed on leaving the block.
+            with NamedTemporaryFile(
+                prefix="terranova-", delete_on_close=False
+            ) as file_descriptor:
+                file_descriptor.close()
                 resolved_path = Path(file_descriptor.name)
                 try:
                     terraform.plan(

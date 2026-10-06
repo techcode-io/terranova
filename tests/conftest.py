@@ -6,11 +6,26 @@ import os
 import stat
 import sys
 from pathlib import Path
-from typing import cast
+from typing import cast, override
 
 import pytest
 
 from terranova.utils import log
+
+
+class _CaseInsensitiveEnv(dict[str, str]):
+    """Environment snapshot whose lookups ignore case, like Windows itself."""
+
+    def __init__(self, env: dict[str, str]) -> None:
+        super().__init__({key.upper(): value for key, value in env.items()})
+
+    @override
+    def __getitem__(self, key: str) -> str:
+        return super().__getitem__(key.upper())
+
+    @override
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and super().__contains__(key.upper())
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -133,7 +148,10 @@ class FakeTerraform:
     @property
     def captured_env(self) -> dict[str, str]:
         capture = cast("dict[str, object]", json.loads(self._capture_path.read_text()))
-        return cast("dict[str, str]", capture["env"])
+        env = cast("dict[str, str]", capture["env"])
+        # Python upper-cases environment names on Windows, so `TF_VAR_region` is captured
+        # as `TF_VAR_REGION`: look names up case-insensitively there.
+        return _CaseInsensitiveEnv(env) if os.name == "nt" else env
 
     @property
     def was_invoked(self) -> bool:

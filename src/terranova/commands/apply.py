@@ -73,9 +73,13 @@ class _ApplyTask(TerraformTask):
         terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._execution_plan:
-            with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
-                path = Path(file_descriptor.name)
-                path.write_bytes(b64decode(self._execution_plan[self.rel_path]))
+            # Closed (but kept) before terraform runs: Windows forbids opening a file that
+            # another handle holds open. It is still removed on leaving the block.
+            with NamedTemporaryFile(
+                prefix="terranova-", delete_on_close=False
+            ) as file_descriptor:
+                file_descriptor.write(b64decode(self._execution_plan[self.rel_path]))
+                file_descriptor.close()
                 terraform.apply(
                     plan=file_descriptor.name,
                     auto_approve=self._auto_approve,
