@@ -21,6 +21,7 @@ dependencies = [
   "mdformat>=0.7.22", # MIT
   "pyserde>=0.32.0", # MIT
   "rich>=15.0.0", # MIT
+  "ruamel-yaml>=0.19.1", # MIT
   "urllib3>=2.2.0", # MIT
 ]
 

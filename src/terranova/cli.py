@@ -38,6 +38,7 @@ from terranova.commands.get import get
 from terranova.commands.graph import graph
 from terranova.commands.init import init
 from terranova.commands.ls import ls
+from terranova.commands.migrate import migrate
 from terranova.commands.output import output
 from terranova.commands.plan import plan
 from terranova.commands.runbook import runbook
@@ -92,6 +93,7 @@ main.add_command(get)
 main.add_command(graph)
 main.add_command(init)
 main.add_command(ls)
+main.add_command(migrate)
 main.add_command(output)
 main.add_command(plan)
 main.add_command(runbook)

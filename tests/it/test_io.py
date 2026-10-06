@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
-from terranova.io import close
+from terranova.io import close, write_atomic
 
 
 class _FakeCloseable:
@@ -42,3 +45,27 @@ class TestClose:
         assert files[0].closed is True
         assert files[1].closed is True
         assert files[2].closed is False
+
+
+class TestWriteAtomic:
+    def test_replaces_content_and_keeps_permissions(self, tmp_path: Path) -> None:
+        target = tmp_path / "file.txt"
+        target.write_text("old")
+        target.chmod(0o640)
+        write_atomic(target, "new")
+        assert target.read_text() == "new"
+        assert target.stat().st_mode & 0o777 == 0o640
+
+    def test_leaves_no_temporary_file(self, tmp_path: Path) -> None:
+        target = tmp_path / "file.txt"
+        target.write_text("old")
+        write_atomic(target, "new")
+        assert os.listdir(tmp_path) == ["file.txt"]
+
+    def test_failure_keeps_original_and_cleans_up(self, tmp_path: Path) -> None:
+        target = tmp_path / "file.txt"
+        target.write_text("old")
+        with pytest.raises(UnicodeEncodeError):
+            write_atomic(target, "\ud800")
+        assert target.read_text() == "old"
+        assert os.listdir(tmp_path) == ["file.txt"]
