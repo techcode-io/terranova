@@ -511,12 +511,13 @@ class Terraform(Bind):
         # attached - callers must never take this path from parallel execution.
         interactive = not plan and not auto_approve
         args = ["apply"] if interactive else ["apply", "-json"]
-        if plan:
-            args.append(plan)
         if auto_approve:
             args.append("-auto-approve")
         if target:
             args.append(f"-target={target}")
+        # Terraform only accepts options before the positional saved plan
+        if plan:
+            args.append(plan)
 
         if interactive:
             self._cmd.args(*args).inherit().exec()
