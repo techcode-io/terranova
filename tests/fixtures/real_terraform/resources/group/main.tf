@@ -1,3 +1,5 @@
+/* @name Greeting
+@tag e2e */
 resource "terraform_data" "greeting" {
   input = templatefile("${path.module}/assets/greeting.tftpl", { name = "world" })
 }
