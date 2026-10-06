@@ -17,11 +17,14 @@
 from pathlib import Path
 from typing import Final
 
+import pytest
 from click.testing import CliRunner
 
 from terranova.cli import main
 from tests import PROJECT_TESTS_FIXTURES_DIR
 from tests.e2e.conftest import assert_result
+
+pytestmark = pytest.mark.posix_only  # fixtures are `.sh` entrypoints
 
 RUNBOOK_ERRORS_FIXTURE_DIR: Final[Path] = PROJECT_TESTS_FIXTURES_DIR / "runbook_errors"
 

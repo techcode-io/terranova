@@ -45,6 +45,7 @@ class TestResourcesManifestFromFile:
         with pytest.raises(MissingManifestError):
             ResourcesManifest.from_file(tmp_path / "manifest.yml")
 
+    @pytest.mark.posix_only
     def test_unreadable_manifest_raises(self, tmp_path: Path) -> None:
         if os.geteuid() == 0:
             pytest.skip("root ignores file permissions")
@@ -230,6 +231,7 @@ class TestResourcesManifestFromFile:
         assert exc_info.value.__cause__ is not None
 
 
+@pytest.mark.posix_only
 class TestResourcesRunbookExec:
     """
     ResourcesRunbook.exec() always calls Command.inherit(), which binds the

@@ -4,12 +4,30 @@ import base64
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import cast
 
 import pytest
 
 from terranova.utils import log
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "posix_only: needs POSIX tools, shebangs or file modes (skipped on Windows)",
+    )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    if sys.platform != "win32":
+        return
+    skip = pytest.mark.skip(reason="requires a POSIX environment")
+    for item in items:
+        if "posix_only" in item.keywords:
+            item.add_marker(skip)
+
 
 _FAKE_TERRAFORM_SCRIPT = """#!/usr/bin/env python3
 import base64
@@ -128,9 +146,17 @@ def fake_terraform_bin(
 ) -> FakeTerraform:
     bin_dir = tmp_path / "fake_bin"
     bin_dir.mkdir(exist_ok=True)
-    script_path = bin_dir / "terraform"
-    script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
-    script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+    if os.name == "nt":
+        # No shebangs on Windows: a `.cmd` shim, resolved through PATHEXT, runs the script.
+        script_path = bin_dir / "terraform.py"
+        script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
+        (bin_dir / "terraform.cmd").write_text(
+            f'@"{sys.executable}" "%~dp0terraform.py" %*\r\n'
+        )
+    else:
+        script_path = bin_dir / "terraform"
+        script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
+        script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
 
     config_path = tmp_path / "fake_terraform_config.json"
     config_path.write_text("{}")

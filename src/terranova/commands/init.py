@@ -25,8 +25,11 @@ from terranova.commands.helpers import (
     read_manifest,
     resource_dirs,
 )
+from terranova.exceptions import ExplainedError
 from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
+
+_WINDOWS_SYMLINK_HINT = "On Windows, enable Developer Mode or run as administrator to allow creating symbolic links"
 
 
 @click.command("init")
@@ -99,16 +102,27 @@ def init(
                         if target_dirname:
                             os.makedirs(target_dirname, exist_ok=True)
 
+                        source = ctx.shared_dir.joinpath(dependency.source)
                         os.symlink(
                             os.path.relpath(
-                                ctx.shared_dir.joinpath(dependency.source).as_posix(),
+                                source.as_posix(),
                                 full_path.joinpath(target_dirname).as_posix(),
                             ),
                             dependency.target,
+                            # Windows needs to know up front whether it links a directory
+                            target_is_directory=source.is_dir(),
                         )
                     except FileExistsError:
                         # The symlink already exists and it's probably fine
                         pass
+                    except OSError as err:
+                        log.fatal(
+                            f"create the symbolic link: {dependency.target}",
+                            ExplainedError(
+                                str(err),
+                                _WINDOWS_SYMLINK_HINT if os.name == "nt" else None,
+                            ),
+                        )
         finally:
             os.chdir(cwd)
 

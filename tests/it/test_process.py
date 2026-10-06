@@ -87,6 +87,7 @@ class TestPathCmd:
         assert parts[0] == "/custom/bin"
 
 
+@pytest.mark.posix_only
 class TestCommand:
     def test_not_found_raises(self) -> None:
         with pytest.raises(CommandNotFound) as exc_info:
@@ -447,6 +448,7 @@ class TestCommand:
         assert any(str(tmp_path) in line for line in lines)
 
 
+@pytest.mark.posix_only
 class TestBind:
     def _make_bind(self) -> Bind:
         return Bind("echo")

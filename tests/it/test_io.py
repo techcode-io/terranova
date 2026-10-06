@@ -48,6 +48,7 @@ class TestClose:
 
 
 class TestWriteAtomic:
+    @pytest.mark.posix_only
     def test_replaces_content_and_keeps_permissions(self, tmp_path: Path) -> None:
         target = tmp_path / "file.txt"
         target.write_text("old")
