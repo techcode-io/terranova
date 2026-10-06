@@ -30,7 +30,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Final, Self, override
+from typing import Any, ClassVar, Final, Self, final, override
 
 import click
 import yaml
@@ -98,7 +98,7 @@ class MigrationRecipe:
     """Manifest version the recipe produces."""
 
     @classmethod
-    def needs_prompt(cls, data: dict[str, Any]) -> bool:  # pyright: ignore[reportExplicitAny]
+    def needs_prompt(cls, data: dict[str, Any]) -> bool:  # pyright: ignore[reportExplicitAny, reportUnusedParameter]
         """
         Whether migrating this manifest requires the user's choices.
 
@@ -130,11 +130,12 @@ class MigrationRecipe:
         data["version"] = DoubleQuotedScalarString(self.target)
         return self.migrate(data)
 
-    def migrate(self, data: CommentedMap) -> tuple[str, ...]:
+    def migrate(self, data: CommentedMap) -> tuple[str, ...]:  # pyright: ignore[reportUnusedParameter]
         """Change the content beyond the version bump (nothing by default)."""
         return ()
 
 
+@final
 class MigrationTo1_1(MigrationRecipe):
     """1.0 -> 1.1: adds `runbooks`, nothing to migrate."""
 
@@ -142,6 +143,7 @@ class MigrationTo1_1(MigrationRecipe):
     target = "1.1"
 
 
+@final
 class MigrationTo1_2(MigrationRecipe):
     """1.1 -> 1.2: adds `imports`, nothing to migrate."""
 
@@ -149,6 +151,7 @@ class MigrationTo1_2(MigrationRecipe):
     target = "1.2"
 
 
+@final
 class MigrationTo1_3(MigrationRecipe):
     """1.2 -> 1.3: adds the runbook env `if`, nothing to migrate."""
 
@@ -156,6 +159,7 @@ class MigrationTo1_3(MigrationRecipe):
     target = "1.3"
 
 
+@final
 @dataclass(frozen=True)
 class MigrationTo1_4(MigrationRecipe):
     """
@@ -207,7 +211,7 @@ class MigrationTo1_4(MigrationRecipe):
         data["engine"] = CommentedMap(
             name=self.engine.name, version=self.engine.version
         )
-        data.yaml_set_comment_before_after_key("engine", before="\n")
+        data.yaml_set_comment_before_after_key("engine", before="\n")  # pyright: ignore[reportUnknownMemberType]
         return (ADD_ENGINE_CHANGE,)
 
 
@@ -308,12 +312,12 @@ def _read_yaml(path: Path) -> tuple[str, dict[str, Any]]:  # pyright: ignore[rep
     except OSError as err:
         raise UnreadableManifestError(path) from err
     try:
-        data = yaml.safe_load(text)
+        data = yaml.safe_load(text)  # pyright: ignore[reportAny]
     except yaml.YAMLError as err:
         raise InvalidManifestError(path) from err
     if not isinstance(data, dict) or "version" not in data:
         raise InvalidManifestError(path)
-    return text, data
+    return text, data  # pyright: ignore[reportUnknownVariableType]
 
 
 def _validate(path: Path, version: str, data: dict[str, Any]) -> None:  # pyright: ignore[reportExplicitAny]
@@ -331,7 +335,7 @@ def _round_trip_yaml() -> YAML:
     """Build a YAML round-tripper keeping quotes and avoiding line rewrapping."""
     yml = YAML(typ="rt")
     yml.preserve_quotes = True
-    yml.indent(mapping=2, sequence=4, offset=2)
+    yml.indent(mapping=2, sequence=4, offset=2)  # pyright: ignore[reportAny]
     yml.width = 4096
     return yml
 
@@ -359,22 +363,22 @@ def migrate_manifest(
             unsupported version. The file is left untouched.
     """
     text, plain = _read_yaml(path)
-    version = str(plain["version"])
+    version = str(plain["version"])  # pyright: ignore[reportAny]
     _validate(path, version, plain)
     chain = recipes_from(version)
     if not chain:
         return MigrationOutcome(version, version)
 
     yml = _round_trip_yaml()
-    data: CommentedMap = yml.load(text)
+    data: CommentedMap = yml.load(text)  # pyright: ignore[reportAny, reportUnknownMemberType]
     changes: list[str] = []
     for recipe_type in chain:
         changes.extend(book.recipe_for(recipe_type, plain).apply(data))
 
     out = io.StringIO()
-    yml.dump(data, out)
+    yml.dump(data, out)  # pyright: ignore[reportUnknownMemberType]
     new_text = out.getvalue()
-    _validate(path, LATEST_MANIFEST_VERSION, yaml.safe_load(new_text))
+    _validate(path, LATEST_MANIFEST_VERSION, yaml.safe_load(new_text))  # pyright: ignore[reportAny]
 
     if not dry_run:
         write_atomic(path, new_text)

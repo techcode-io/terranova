@@ -65,9 +65,8 @@ def migrate(ctx: AppContext, path: str | None, auto_scope: bool, dry_run: bool) 
             f"{verb}: {rel_path} {outcome.from_version} -> {outcome.to_version}{extra}"
         )
 
-    log.action(
-        f"{migrated} {'to migrate' if dry_run else 'migrated'}, "
-        f"{up_to_date} already at {LATEST_MANIFEST_VERSION}, {len(failed)} failed"
-    )
+    migrated_label = "to migrate" if dry_run else "migrated"
+    summary = f"{migrated} {migrated_label}, {up_to_date} already at {LATEST_MANIFEST_VERSION}"
+    log.action(f"{summary}, {len(failed)} failed")
     if failed:
         raise Exit(code=1)
