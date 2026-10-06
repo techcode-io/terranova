@@ -98,6 +98,48 @@ jobs:
       - name: Test
         run: uv run poe test
 
+  e2e-terraform:
+    needs:
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install environment
+        uses: ./.github/workflows/env-install
+
+      - name: Install terraform binary
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      # Windows runs against the frozen bundle that gets released, Linux against the sources
+      - uses: actions/download-artifact@v8
+        if: runner.os == 'Windows'
+        with:
+          pattern: terranova-tarball-windows-*
+          merge-multiple: true
+          path: dist
+
+      - name: Unpack the Windows bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter "terranova-*-windows-amd64.zip" | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$HOME\terranova"
+          "TERRANOVA_BIN=$HOME\terranova\terranova.exe" >> $env:GITHUB_ENV
+
+      - name: Run against real terraform
+        env:
+          TERRANOVA_E2E_REAL_TERRAFORM: "1"
+        run: uv run pytest -vv -s --timeout=900 tests/e2e/test_real_terraform.py
+
   package-deb:
     needs:
       - test
