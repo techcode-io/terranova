@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import io
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,13 +85,30 @@ class Log(ABC):
         raise Exit(code=raise_exit)
 
 
+def _new_console(stderr: bool = False) -> Console:
+    """
+    Create a console that survives redirected output on Windows.
+
+    A piped or redirected stream there defaults to the ANSI code page, which cannot encode
+    the `⇒` and `✓` markers, and `rich` would still take its legacy Windows renderer for it.
+    Both are only needed for a real terminal, so switch them off for anything else.
+    """
+    stream = sys.stderr if stderr else sys.stdout
+    legacy_windows: bool | None = None
+    if sys.platform == "win32" and not stream.isatty():
+        legacy_windows = False
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    return Console(stderr=stderr, legacy_windows=legacy_windows)
+
+
 class ConsoleLog(Log):
     """`Log` implementation backed by a pair of `rich` consoles."""
 
     def __init__(self, debug: bool = False) -> None:
         """Init console log."""
-        self.__console = Console()
-        self.__err_console = Console(stderr=True)
+        self.__console = _new_console()
+        self.__err_console = _new_console(stderr=True)
         self.__debug = debug
 
     def configure(self, debug: bool) -> None:
