@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import platform
+import shutil
 import stat
 from pathlib import Path
 from typing import Final
@@ -31,6 +32,17 @@ COMPLETION_FILES: Final[dict[str, str]] = {
     "zsh": "_terranova",
     "fish": "terranova.fish",
 }
+SPEC_NAMES: Final[dict[str, str]] = {
+    "darwin": "macOS",
+    "linux": "linux",
+    "windows": "windows",
+}
+ARCH_NAMES: Final[dict[str, str]] = {
+    "x86_64": "amd64",
+    "amd64": "amd64",
+    "arm64": "arm64",
+    "aarch64": "arm64",
+}
 
 
 def run() -> None:
@@ -41,7 +53,7 @@ def run() -> None:
     DIST_DIR.mkdir(parents=True, exist_ok=False)
 
     system = platform.system().lower()
-    spec_name = "macOS" if system == "darwin" else "linux"
+    spec_name = SPEC_NAMES[system]
     spec_src = DISTRIBUTIONS_TARBALL_PATH / f"terranova.{spec_name}.spec"
 
     try:
@@ -51,7 +63,11 @@ def run() -> None:
         SPEC_PATH.unlink(missing_ok=True)
 
     # Make terranova executable
-    terranova_exec = DIST_DIR / "terranova" / "terranova"
+    terranova_exec = (
+        DIST_DIR
+        / "terranova"
+        / ("terranova.exe" if system == "windows" else "terranova")
+    )
     terranova_exec.chmod(terranova_exec.stat().st_mode | stat.S_IEXEC)
 
     # Check terranova bundle is working
@@ -65,12 +81,15 @@ def run() -> None:
             completions_dir / filename
         ).exec()
 
-    # Create a tarball for macOS
-    if system == "darwin":
-        arch = platform.machine()
-        arch = "amd64" if arch == "x86_64" else arch
+    # Create a tarball for macOS, a zip for Windows
+    if system in ("darwin", "windows"):
+        machine = platform.machine().lower()
+        arch = ARCH_NAMES.get(machine, machine)
         bundle_dir = DIST_DIR / f"terranova-{version}-{system}-{arch}"
         (DIST_DIR / "terranova").replace(bundle_dir)
+        if system == "windows":
+            shutil.make_archive(bundle_dir.as_posix(), "zip", root_dir=bundle_dir)
+            return
         Command("tar").args(
             "-C",
             bundle_dir.as_posix(),

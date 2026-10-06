@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
+
 from scripts.utils import fatal
 from terranova.process import Bind, CommandNotFound
 
@@ -47,7 +49,8 @@ class PyInstaller(Bind):
             args.extend(["--hidden-import", hidden_import])
 
         for src, dst in add_data:
-            args.extend(["--add-data", f"{src}:{dst}"])
+            # PyInstaller separates source and destination with the OS path separator
+            args.extend(["--add-data", f"{src}{os.pathsep}{dst}"])
 
         args.append("./bin/terranova")
         self._cmd.args(*args).inherit_out().exec()
