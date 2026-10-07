@@ -255,6 +255,23 @@ class MissingRunbookEnvError(RunbookError):
         )
 
 
+class ImportOutputError(ExplainedError):
+    """Represents a failure to read an `imports` output from another resource group."""
+
+    def __init__(
+        self, rel_path: str, resource: str, importer: str | None = None
+    ) -> None:
+        """Init import output error."""
+        needed_by = f" needed by `{importer}`" if importer else ""
+        super().__init__(
+            cause=(
+                f"The output `{resource}` of resource group `{rel_path}`{needed_by} "
+                "could not be read."
+            ),
+            resolution=f"Run `terranova apply {rel_path}` first, and check the terraform output above.",
+        )
+
+
 class SelfImportNotReadyError(RunbookError):
     """Represents a self-import whose output isn't available yet when a runbook runs."""
 

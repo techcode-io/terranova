@@ -31,6 +31,7 @@ from terranova.exceptions import (
     EngineError,
     GitRepositoryError,
     GraphError,
+    ImportOutputError,
     InvalidResourcesError,
     ManifestError,
     SelfImportNotReadyError,
@@ -417,6 +418,7 @@ def extract_import_vars(
                 plugin_cache_dir,
                 verbose,
                 is_self=is_self_import,
+                importer=self_rel_path,
             )
     return variables
 
@@ -429,6 +431,7 @@ def extract_output_var(
     verbose: bool = False,
     *,
     is_self: bool = False,
+    importer: str | None = None,
 ) -> str:
     """Show output values from your root module."""
     # Construct resources path
@@ -443,6 +446,11 @@ def extract_output_var(
     except ErrorReturnCode as err:
         if is_self:
             raise SelfImportNotReadyError(path, name) from err
+        log.failure(
+            f"resolve import `{name}` from `{path}`"
+            + (f" for `{importer}`" if importer else ""),
+            ImportOutputError(path, name, importer),
+        )
         raise Exit(code=err.exit_code) from err
 
 

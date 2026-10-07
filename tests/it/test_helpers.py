@@ -466,6 +466,29 @@ class TestExtractOutputVar:
             extract_output_var("producer", "some_name", resources_dir, plugin_cache_dir)
         assert exc_info.value.exit_code == 5
 
+    def test_error_logs_failing_import(
+        self,
+        tmp_path: Path,
+        fake_terraform_bin: FakeTerraform,
+        resources_dir: Path,
+        plugin_cache_dir: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The failure names the import and its source, not just terraform's error."""
+        _write_manifest_dir(tmp_path, "resources", "producer")
+        fake_terraform_bin.set_exit_code(1)
+        with pytest.raises(Exit):
+            extract_output_var(
+                "producer",
+                "some_name",
+                resources_dir,
+                plugin_cache_dir,
+                importer="consumer",
+            )
+        err = capsys.readouterr().err
+        assert "resolve import `some_name` from `producer` for `consumer`" in err
+        assert "Cause:" in err
+
 
 class TestAutoScopeResourceDirs:
     def test_not_a_git_repo_calls_log_fatal(
