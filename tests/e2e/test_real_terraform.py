@@ -18,12 +18,12 @@
 End-to-end run against a real terraform binary.
 
 Everything else in `tests/e2e` uses a fake terraform. This module drives the complete
-init -> plan -> apply -> output -> destroy flow through a real one, which is what proves
-the Windows support (symlinks, paths, process handling). It only needs terraform's built-in
-`terraform_data`, so no provider is downloaded.
+init -> plan -> apply -> output -> destroy flow through a real one, installed by the
+`real_terraform` fixture, which is what proves the Windows support (symlinks, paths,
+process handling). It only needs terraform's built-in `terraform_data`, so no provider
+is downloaded.
 
-Opt in with `TERRANOVA_E2E_REAL_TERRAFORM=1`. Set `TERRANOVA_BIN` to test a frozen bundle
-instead of the sources.
+Set `TERRANOVA_BIN` to test a frozen bundle instead of the sources.
 """
 
 import os
@@ -35,11 +35,6 @@ from pathlib import Path
 import pytest
 
 from tests import PROJECT_TESTS_FIXTURES_DIR
-
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("TERRANOVA_E2E_REAL_TERRAFORM"),
-    reason="set TERRANOVA_E2E_REAL_TERRAFORM=1 to run against a real terraform",
-)
 
 
 def _terranova(
@@ -72,8 +67,8 @@ def conf_dir(tmp_path: Path) -> Path:
     return target
 
 
+@pytest.mark.usefixtures("real_terraform")
 def test_full_lifecycle_with_real_terraform(conf_dir: Path) -> None:
-    assert shutil.which("terraform"), "terraform must be on PATH"
     group = conf_dir / "resources" / "group"
     plan_file = conf_dir / "plan.tnplan"
 
