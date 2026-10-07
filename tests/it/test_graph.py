@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import pairwise
 from pathlib import Path
 from typing import Final
 
@@ -97,7 +98,7 @@ class TestComputeWaves:
 
         chain = exc_info.value.cause.rsplit(": ", 1)[-1].split(" -> ")
         assert chain[0] == chain[-1]
-        edges = set(zip(chain, chain[1:]))
+        edges = set(pairwise(chain))
         assert edges <= {("a", "b"), ("b", "c"), ("c", "a")}
         assert len(edges) == 3
 
