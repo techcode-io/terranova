@@ -90,22 +90,6 @@ jobs:
       - name: Install environment
         uses: ./.github/workflows/env-install
 
-      # On Windows the real-terraform e2e drives the frozen bundle that gets released
-      - uses: actions/download-artifact@v8
-        if: runner.os == 'Windows'
-        with:
-          pattern: terranova-tarball-windows-*
-          merge-multiple: true
-          path: dist
-
-      - name: Unpack the Windows bundle
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $zip = Get-ChildItem dist -Filter "terranova-*-windows-amd64.zip" | Select-Object -First 1
-          Expand-Archive -Path $zip.FullName -DestinationPath "$HOME\terranova"
-          "TERRANOVA_BIN=$HOME\terranova\terranova.exe" >> $env:GITHUB_ENV
-
       # The real-terraform e2e installs its own terraform through the engine manager
       - name: Test
         run: uv run poe test

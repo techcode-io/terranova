@@ -22,11 +22,8 @@ init -> plan -> apply -> output -> destroy flow through a real one, installed by
 `real_terraform` fixture, which is what proves the Windows support (symlinks, paths,
 process handling). It only needs terraform's built-in `terraform_data`, so no provider
 is downloaded.
-
-Set `TERRANOVA_BIN` to test a frozen bundle instead of the sources.
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -40,14 +37,15 @@ from tests import PROJECT_TESTS_FIXTURES_DIR
 def _terranova(
     conf_dir: Path, *args: str, stdin: str | None = None
 ) -> subprocess.CompletedProcess[str]:
-    binary = os.environ.get("TERRANOVA_BIN")
-    cmd = (
-        [binary]
-        if binary
-        else [sys.executable, "-c", "from terranova.cli import main; main()"]
-    )
     result = subprocess.run(
-        [*cmd, "--conf-dir", str(conf_dir), *args],
+        [
+            sys.executable,
+            "-c",
+            "from terranova.cli import main; main()",
+            "--conf-dir",
+            str(conf_dir),
+            *args,
+        ],
         input=stdin,
         capture_output=True,
         text=True,
