@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 import os
+from pathlib import Path
+from typing import Final
 
 import click
 from click.exceptions import Exit
@@ -25,8 +27,13 @@ from terranova.commands.helpers import (
     read_manifest,
     resource_dirs,
 )
+from terranova.exceptions import ExplainedError
 from terranova.process import ErrorReturnCode
-from terranova.utils import AppContext, log
+from terranova.utils import IS_WINDOWS, AppContext, log
+
+_WINDOWS_SYMLINK_HINT: Final[str] = (
+    "On Windows, enable Developer Mode or run as administrator to allow creating symbolic links"
+)
 
 
 @click.command("init")
@@ -99,16 +106,27 @@ def init(
                         if target_dirname:
                             os.makedirs(target_dirname, exist_ok=True)
 
+                        source = ctx.shared_dir.joinpath(dependency.source)
                         os.symlink(
                             os.path.relpath(
-                                ctx.shared_dir.joinpath(dependency.source).as_posix(),
+                                source.as_posix(),
                                 full_path.joinpath(target_dirname).as_posix(),
                             ),
                             dependency.target,
+                            # Windows needs to know up front whether it links a directory
+                            target_is_directory=source.is_dir(),
                         )
                     except FileExistsError:
                         # The symlink already exists and it's probably fine
                         pass
+                    except OSError as err:
+                        log.fatal(
+                            f"create the symbolic link: {dependency.target}",
+                            ExplainedError(
+                                str(err),
+                                _WINDOWS_SYMLINK_HINT if IS_WINDOWS else None,
+                            ),
+                        )
         finally:
             os.chdir(cwd)
 
@@ -136,7 +154,11 @@ def init(
                 manifest=manifest,
             )
             terraform.init(
-                backend_config={"key": os.path.relpath(full_path, ctx.resources_dir)},
+                backend_config={
+                    "key": Path(
+                        os.path.relpath(full_path, ctx.resources_dir)
+                    ).as_posix()
+                },
                 migrate_state=migrate_state,
                 no_backend=no_backend,
                 reconfigure=reconfigure,

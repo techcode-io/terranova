@@ -4,12 +4,45 @@ import base64
 import json
 import os
 import stat
+import sys
 from pathlib import Path
-from typing import cast
+from typing import cast, override
 
 import pytest
 
-from terranova.utils import log
+from terranova.utils import IS_WINDOWS, log
+
+
+class _CaseInsensitiveEnv(dict[str, str]):
+    """Environment snapshot whose lookups ignore case, like Windows itself."""
+
+    def __init__(self, env: dict[str, str]) -> None:
+        super().__init__({key.upper(): value for key, value in env.items()})
+
+    @override
+    def __getitem__(self, key: str) -> str:
+        return super().__getitem__(key.upper())
+
+    @override
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and super().__contains__(key.upper())
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "posix_only: needs POSIX tools, shebangs or file modes (skipped on Windows)",
+    )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    if not IS_WINDOWS:
+        return
+    skip = pytest.mark.skip(reason="requires a POSIX environment")
+    for item in items:
+        if "posix_only" in item.keywords:
+            item.add_marker(skip)
+
 
 _FAKE_TERRAFORM_SCRIPT = """#!/usr/bin/env python3
 import base64
@@ -115,7 +148,10 @@ class FakeTerraform:
     @property
     def captured_env(self) -> dict[str, str]:
         capture = cast("dict[str, object]", json.loads(self._capture_path.read_text()))
-        return cast("dict[str, str]", capture["env"])
+        env = cast("dict[str, str]", capture["env"])
+        # Python upper-cases environment names on Windows, so `TF_VAR_region` is captured
+        # as `TF_VAR_REGION`: look names up case-insensitively there.
+        return _CaseInsensitiveEnv(env) if IS_WINDOWS else env
 
     @property
     def was_invoked(self) -> bool:
@@ -128,9 +164,17 @@ def fake_terraform_bin(
 ) -> FakeTerraform:
     bin_dir = tmp_path / "fake_bin"
     bin_dir.mkdir(exist_ok=True)
-    script_path = bin_dir / "terraform"
-    script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
-    script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
+    if IS_WINDOWS:
+        # No shebangs on Windows: a `.cmd` shim, resolved through PATHEXT, runs the script.
+        script_path = bin_dir / "terraform.py"
+        script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
+        (bin_dir / "terraform.cmd").write_text(
+            f'@"{sys.executable}" "%~dp0terraform.py" %*\r\n'
+        )
+    else:
+        script_path = bin_dir / "terraform"
+        script_path.write_text(_FAKE_TERRAFORM_SCRIPT)
+        script_path.chmod(script_path.stat().st_mode | stat.S_IEXEC)
 
     config_path = tmp_path / "fake_terraform_config.json"
     config_path.write_text("{}")

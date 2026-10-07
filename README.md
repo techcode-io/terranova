@@ -115,6 +115,21 @@ The script installs the `.deb`/`.rpm` package on Linux (under `/opt/terranova`, 
 into `/usr/bin/terranova`) and the tarball on macOS. See `contrib/install.sh --help` for
 `--prefix` and `--bin-dir`.
 
+### How to install (Windows)
+
+```powershell
+irm https://raw.githubusercontent.com/techcode-io/terranova/main/contrib/install.ps1 | iex
+```
+
+The script extracts the release zip into `%LOCALAPPDATA%\terranova` and adds it to your user
+`PATH`. To pin a version or change the directory, download the script and run
+`./install.ps1 -Version 0.7.2 -Prefix C:\tools\terranova`.
+
+Terranova links shared dependencies with symbolic links during `init`, which Windows only
+allows with Developer Mode enabled (Settings > System > For developers) or from an elevated
+shell. Runbook entrypoints run without a shell, so use an `.exe` or `.cmd`, or name an
+interpreter explicitly, rather than a `.sh` script.
+
 ### Shell completion
 
 `terranova completion <bash|zsh|fish>` prints a completion script that completes commands,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import stat
 import sys
 import textwrap
 from pathlib import Path
@@ -34,9 +33,9 @@ def _write_manifest(path: Path, content: str) -> Path:
 
 
 def _write_entrypoint(path: Path, body: str) -> str:
-    script = path / "entrypoint.sh"
-    script.write_text(f"#!/bin/sh\n{body}\n")
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    """Write a python entrypoint, run through `sys.executable` so it works on every OS."""
+    script = path / "entrypoint.py"
+    script.write_text(f"import os, sys\n{body}\n")
     return str(script.absolute())
 
 
@@ -45,9 +44,9 @@ class TestResourcesManifestFromFile:
         with pytest.raises(MissingManifestError):
             ResourcesManifest.from_file(tmp_path / "manifest.yml")
 
-    def test_unreadable_manifest_raises(self, tmp_path: Path) -> None:
-        if os.geteuid() == 0:
-            pytest.skip("root ignores file permissions")
+    def test_unreadable_manifest_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         manifest = _write_manifest(
             tmp_path,
             """
@@ -57,12 +56,14 @@ class TestResourcesManifestFromFile:
               description: test
             """,
         )
-        manifest.chmod(0o000)
-        try:
-            with pytest.raises(UnreadableManifestError):
-                ResourcesManifest.from_file(manifest)
-        finally:
-            manifest.chmod(0o644)
+        # `chmod` does not make a file unreadable on Windows, so fake the permission probe
+
+        def no_access(_path: str, _mode: int) -> bool:
+            return False
+
+        monkeypatch.setattr("terranova.resources.os.access", no_access)
+        with pytest.raises(UnreadableManifestError):
+            ResourcesManifest.from_file(manifest)
 
     def test_invalid_yaml_raises(self, tmp_path: Path) -> None:
         manifest = _write_manifest(tmp_path, "key: [unclosed")
@@ -245,10 +246,11 @@ class TestResourcesRunbookExec:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("X", "from_env")
-        entrypoint = _write_entrypoint(tmp_path, 'echo "X=$X"')
+        entrypoint = _write_entrypoint(tmp_path, 'print("X=" + os.environ["X"])')
         runbook = ResourcesRunbook(
             name="rb",
-            entrypoint=entrypoint,
+            entrypoint=sys.executable,
+            args=[entrypoint],
             env=[ResourcesRunbookEnv(name="X", value="literal")],
         )
         runbook.exec(tmp_path, "path", tmp_path, {"X": "from_import"})
@@ -261,9 +263,12 @@ class TestResourcesRunbookExec:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("X", "env_val")
-        entrypoint = _write_entrypoint(tmp_path, 'echo "X=$X"')
+        entrypoint = _write_entrypoint(tmp_path, 'print("X=" + os.environ["X"])')
         runbook = ResourcesRunbook(
-            name="rb", entrypoint=entrypoint, env=[ResourcesRunbookEnv(name="X")]
+            name="rb",
+            entrypoint=sys.executable,
+            args=[entrypoint],
+            env=[ResourcesRunbookEnv(name="X")],
         )
         runbook.exec(tmp_path, "path", tmp_path, {"X": "import_val"})
         assert "X=import_val" in capsys.readouterr().out
@@ -275,28 +280,33 @@ class TestResourcesRunbookExec:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("X", "env_val")
-        entrypoint = _write_entrypoint(tmp_path, 'echo "X=$X"')
+        entrypoint = _write_entrypoint(tmp_path, 'print("X=" + os.environ["X"])')
         runbook = ResourcesRunbook(
-            name="rb", entrypoint=entrypoint, env=[ResourcesRunbookEnv(name="X")]
+            name="rb",
+            entrypoint=sys.executable,
+            args=[entrypoint],
+            env=[ResourcesRunbookEnv(name="X")],
         )
         runbook.exec(tmp_path, "path", tmp_path, {})
         assert "X=env_val" in capsys.readouterr().out
 
     def test_missing_env_without_is_defined_raises(self, tmp_path: Path) -> None:
-        entrypoint = _write_entrypoint(tmp_path, "true")
+        entrypoint = _write_entrypoint(tmp_path, "pass")
         runbook = ResourcesRunbook(
             name="rb",
-            entrypoint=entrypoint,
+            entrypoint=sys.executable,
+            args=[entrypoint],
             env=[ResourcesRunbookEnv(name="MISSING")],
         )
         with pytest.raises(MissingRunbookEnvError):
             runbook.exec(tmp_path, "path", tmp_path, {})
 
     def test_missing_env_with_wrong_if_value_raises(self, tmp_path: Path) -> None:
-        entrypoint = _write_entrypoint(tmp_path, "true")
+        entrypoint = _write_entrypoint(tmp_path, "pass")
         runbook = ResourcesRunbook(
             name="rb",
-            entrypoint=entrypoint,
+            entrypoint=sys.executable,
+            args=[entrypoint],
             env=[ResourcesRunbookEnv(name="MISSING", with_if="something_else")],
         )
         with pytest.raises(MissingRunbookEnvError):
@@ -307,10 +317,13 @@ class TestResourcesRunbookExec:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        entrypoint = _write_entrypoint(tmp_path, 'echo "MISSING=[$MISSING]"')
+        entrypoint = _write_entrypoint(
+            tmp_path, 'print("MISSING=[" + os.environ.get("MISSING", "") + "]")'
+        )
         runbook = ResourcesRunbook(
             name="rb",
-            entrypoint=entrypoint,
+            entrypoint=sys.executable,
+            args=[entrypoint],
             env=[ResourcesRunbookEnv(name="MISSING", with_if="is_defined")],
         )
         runbook.exec(tmp_path, "path", tmp_path, {})
@@ -322,12 +335,16 @@ class TestResourcesRunbookExec:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setenv("PATH", "/usr/bin:/bin")
-        entrypoint = _write_entrypoint(tmp_path, 'echo "PATH=$PATH"')
-        runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint)
+        system_path = os.pathsep.join(["sys_a", "sys_b"])
+        monkeypatch.setenv("PATH", system_path)
+        entrypoint = _write_entrypoint(tmp_path, 'print("PATH=" + os.environ["PATH"])')
+        runbook = ResourcesRunbook(
+            name="rb", entrypoint=sys.executable, args=[entrypoint]
+        )
         engine_dir = tmp_path / "engine"
         runbook.exec(tmp_path, "path", tmp_path, {}, engine_dir=engine_dir)
-        assert f"PATH={engine_dir.as_posix()}:/usr/bin:/bin" in capsys.readouterr().out
+        expected = f"PATH={engine_dir.as_posix()}{os.pathsep}{system_path}"
+        assert expected in capsys.readouterr().out
 
     def test_path_is_unchanged_without_engine_dir(
         self,
@@ -335,11 +352,14 @@ class TestResourcesRunbookExec:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.setenv("PATH", "/usr/bin:/bin")
-        entrypoint = _write_entrypoint(tmp_path, 'echo "PATH=$PATH"')
-        runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint)
+        system_path = os.pathsep.join(["sys_a", "sys_b"])
+        monkeypatch.setenv("PATH", system_path)
+        entrypoint = _write_entrypoint(tmp_path, 'print("PATH=" + os.environ["PATH"])')
+        runbook = ResourcesRunbook(
+            name="rb", entrypoint=sys.executable, args=[entrypoint]
+        )
         runbook.exec(tmp_path, "path", tmp_path, {})
-        assert "PATH=/usr/bin:/bin" in capsys.readouterr().out
+        assert f"PATH={system_path}" in capsys.readouterr().out
 
     def test_terranova_env_vars_always_injected(
         self,
@@ -348,9 +368,12 @@ class TestResourcesRunbookExec:
     ) -> None:
         entrypoint = _write_entrypoint(
             tmp_path,
-            'echo "PATH_VAR=$TERRANOVA_PATH"\necho "RUNBOOK_NAME=$TERRANOVA_RUNBOOK_NAME"',
+            "print('PATH_VAR=' + os.environ['TERRANOVA_PATH'])\n"
+            + "print('RUNBOOK_NAME=' + os.environ['TERRANOVA_RUNBOOK_NAME'])",
         )
-        runbook = ResourcesRunbook(name="my_runbook", entrypoint=entrypoint)
+        runbook = ResourcesRunbook(
+            name="my_runbook", entrypoint=sys.executable, args=[entrypoint]
+        )
         runbook.exec(tmp_path, "the_path", tmp_path, {})
         out = capsys.readouterr().out
         assert "PATH_VAR=the_path" in out
@@ -363,19 +386,25 @@ class TestResourcesRunbookExec:
     ) -> None:
         subdir = tmp_path / "subdir"
         subdir.mkdir()
-        entrypoint = _write_entrypoint(tmp_path, "pwd")
-        runbook = ResourcesRunbook(name="rb", entrypoint=entrypoint, workdir="subdir")
+        entrypoint = _write_entrypoint(tmp_path, "print(os.getcwd())")
+        runbook = ResourcesRunbook(
+            name="rb", entrypoint=sys.executable, args=[entrypoint], workdir="subdir"
+        )
         runbook.exec(tmp_path, "path", tmp_path, {})
-        assert str(subdir) in capsys.readouterr().out
+        assert Path(capsys.readouterr().out.strip()).resolve() == subdir.resolve()
 
     def test_args_passed_to_entrypoint(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        entrypoint = _write_entrypoint(tmp_path, 'echo "ARGS=$@"')
+        entrypoint = _write_entrypoint(
+            tmp_path, 'print("ARGS=" + " ".join(sys.argv[1:]))'
+        )
         runbook = ResourcesRunbook(
-            name="rb", entrypoint=entrypoint, args=["foo", "bar"]
+            name="rb",
+            entrypoint=sys.executable,
+            args=[entrypoint, "foo", "bar"],
         )
         runbook.exec(tmp_path, "path", tmp_path, {})
         assert "ARGS=foo bar" in capsys.readouterr().out

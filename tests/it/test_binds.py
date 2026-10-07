@@ -445,6 +445,17 @@ class TestTerraformApply:
         assert "path/to/plan" in argv
         assert "-json" in argv
 
+    def test_apply_puts_saved_plan_after_options(
+        self, tmp_path: Path, fake_terraform_bin: FakeTerraform, plugin_cache_dir: Path
+    ) -> None:
+        # Terraform rejects options placed after the positional saved plan
+        Terraform(tmp_path, plugin_cache_dir).apply(
+            plan="path/to/plan", auto_approve=True, target="aws_instance.foo"
+        )
+        argv = fake_terraform_bin.captured_argv
+        assert argv[0] == "apply"
+        assert argv[-1] == "path/to/plan"
+
     def test_apply_auto_approve_flag(
         self, tmp_path: Path, fake_terraform_bin: FakeTerraform, plugin_cache_dir: Path
     ) -> None:

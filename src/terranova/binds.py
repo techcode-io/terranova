@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from io import StringIO
@@ -24,7 +26,13 @@ from terranova.engines import ENGINE_DESCRIPTORS
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
 from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
-from terranova.utils import int_or_default, log, str_or_none
+from terranova.utils import (
+    IS_WINDOWS,
+    WINDOWS_INHERIT_ENV_VARS,
+    int_or_default,
+    log,
+    str_or_none,
+)
 
 _DIAGNOSTIC_RULE: Final[str] = "─" * 60
 _MAX_FALLBACK_DIAGNOSTIC_LENGTH: Final[int] = 4000
@@ -90,7 +98,7 @@ class ChangeSummary:
         return "\n".join(lines)
 
     @staticmethod
-    def parse(text: str) -> "ChangeSummary":
+    def parse(text: str) -> ChangeSummary:
         """Interpret a captured `terraform plan/apply -json` stream as a `ChangeSummary`."""
         to_add = to_change = to_destroy = 0
         resources: list[ResourceChange] = []
@@ -133,7 +141,7 @@ class ChangeSummary:
         )
 
     @staticmethod
-    def parse_failure(text: str, exit_code: int) -> "ChangeSummary":
+    def parse_failure(text: str, exit_code: int) -> ChangeSummary:
         """
         Summarize a failed `-json` capture, always producing at least one diagnostic.
 
@@ -167,7 +175,7 @@ class ChangeSummary:
     @staticmethod
     def _format_resource_change(
         raw_change: dict[str, object], action: object
-    ) -> "ResourceChange | None":
+    ) -> ResourceChange | None:
         """
         Build a `ResourceChange` from one `planned_change` event's `change` object.
 
@@ -220,7 +228,7 @@ class ValidationDiagnostic:
     detail: str | None = None
 
     @staticmethod
-    def parse(raw: object) -> "ValidationDiagnostic | None":
+    def parse(raw: object) -> ValidationDiagnostic | None:
         """Interpret one raw `diagnostics[]` entry, or `None` if it's not a usable one."""
         if not isinstance(raw, dict):
             return None
@@ -246,7 +254,7 @@ class ValidationResult:
     diagnostics: tuple[ValidationDiagnostic, ...] = ()
 
     @staticmethod
-    def parse(text: str) -> "ValidationResult":
+    def parse(text: str) -> ValidationResult:
         """
         Interpret the single JSON object produced by `terraform validate -json`.
 
@@ -332,6 +340,7 @@ class Terraform(Bind):
             "GOOGLE_GHA_CREDS_PATH",
             "HOME",
             "PATH",
+            *(WINDOWS_INHERIT_ENV_VARS if IS_WINDOWS else ()),
         )
 
         # Predicate for allowed env vars
@@ -502,12 +511,13 @@ class Terraform(Bind):
         # attached - callers must never take this path from parallel execution.
         interactive = not plan and not auto_approve
         args = ["apply"] if interactive else ["apply", "-json"]
-        if plan:
-            args.append(plan)
         if auto_approve:
             args.append("-auto-approve")
         if target:
             args.append(f"-target={target}")
+        # Terraform only accepts options before the positional saved plan
+        if plan:
+            args.append(plan)
 
         if interactive:
             self._cmd.args(*args).inherit().exec()

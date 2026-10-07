@@ -16,7 +16,6 @@
 #
 from base64 import b64decode
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import override
 
 import click
@@ -34,6 +33,7 @@ from terranova.commands.helpers import (
 )
 from terranova.exceptions import InteractiveApprovalError
 from terranova.executor import ResourceGroupTask
+from terranova.io import temp_file
 from terranova.resources import ResourcesManifest
 from terranova.utils import AppContext, Constants, log
 
@@ -73,11 +73,11 @@ class _ApplyTask(TerraformTask):
         terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._execution_plan:
-            with NamedTemporaryFile(prefix="terranova-") as file_descriptor:
-                path = Path(file_descriptor.name)
-                path.write_bytes(b64decode(self._execution_plan[self.rel_path]))
+            with temp_file(
+                content=b64decode(self._execution_plan[self.rel_path])
+            ) as plan_path:
                 terraform.apply(
-                    plan=file_descriptor.name,
+                    plan=str(plan_path),
                     auto_approve=self._auto_approve,
                     target=self._target,
                     rel_path=self.rel_path,

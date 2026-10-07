@@ -53,6 +53,8 @@ jobs:
             target: linux-amd64
           - runner: ubuntu-24.04-arm
             target: linux-arm64
+          - runner: windows-2025
+            target: windows-amd64
     runs-on: ${{ matrix.os.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -75,18 +77,20 @@ jobs:
   test:
     needs:
       - build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Install environment
         uses: ./.github/workflows/env-install
 
-      - name: Install terraform binary
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_wrapper: false
-
+      # The real-terraform e2e installs its own terraform through the engine manager
       - name: Test
         run: uv run poe test
 
@@ -242,3 +246,24 @@ jobs:
           ln -sf ~/.local/opt/terranova/terranova ~/.local/bin/terranova
           ~/.local/bin/terranova --version || exit 1
         if: runner.arch == 'ARM64'
+
+  sanitize-zip:
+    needs:
+      - test
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: terranova-tarball-windows-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify Windows amd64 install
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter "terranova-*-windows-amd64.zip" | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath "$HOME\terranova"
+          & "$HOME\terranova\terranova.exe" --version
+          if ($LASTEXITCODE -ne 0) { exit 1 }

@@ -37,7 +37,7 @@ from terranova.exceptions import (
 )
 from terranova.process import Command, PathCmd
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
-from terranova.utils import Constants, serde
+from terranova.utils import Constants, platform_env_vars, serde
 
 
 @serde
@@ -103,6 +103,7 @@ class ResourcesRunbook:
         `None` keeps the system `PATH` untouched.
         """
         env = {
+            **platform_env_vars(),
             "TERRANOVA_PATH": path,
             "TERRANOVA_CONF_DIR": conf_dir.absolute().as_posix(),
             "TERRANOVA_RUNBOOK_NAME": self.name,

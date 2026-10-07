@@ -225,7 +225,10 @@ def find_all_resource_dirs(
     for path, _, files in os.walk(search_dir or resources_dir):
         for file in files:
             if os.path.basename(file) == Constants.MANIFEST_FILE_NAME:
-                paths.append((Path(path), path[resources_dir_prefix_len:]))
+                # Always `/`-separated: the rel_path is a portable key (plan files, state, graph)
+                paths.append(
+                    (Path(path), path[resources_dir_prefix_len:].replace(os.sep, "/"))
+                )
     return paths
 
 

@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import io
+import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +44,36 @@ def int_or_default(value: object, default: int) -> int:
 def str_or_none(value: object) -> str | None:
     """Coerce an untyped value (e.g. from `json.loads()`) to `str`, or `None`."""
     return value if isinstance(value, str) else None
+
+
+# Detected once here so the platform-specific behavior has a single, easily patched source
+IS_WINDOWS: Final[bool] = sys.platform == "win32"
+
+
+# Variables Windows processes need to initialise (sockets, DNS, temp files, executable lookup);
+# without them terraform or a python entrypoint fails to start. `HOME` has no meaning there,
+# `USERPROFILE` replaces it.
+WINDOWS_INHERIT_ENV_VARS: tuple[str, ...] = (
+    "APPDATA",
+    "COMSPEC",
+    "LOCALAPPDATA",
+    "PATHEXT",
+    "PROGRAMDATA",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+)
+
+
+def platform_env_vars() -> dict[str, str]:
+    """Variables a child process needs to start on this OS, taken from the current one."""
+    if not IS_WINDOWS:
+        return {}
+    return {
+        k: v for k in WINDOWS_INHERIT_ENV_VARS if (v := os.environ.get(k)) is not None
+    }
 
 
 class Constants:
@@ -83,13 +116,30 @@ class Log(ABC):
         raise Exit(code=raise_exit)
 
 
+def _new_console(stderr: bool = False) -> Console:
+    """
+    Create a console that survives redirected output on Windows.
+
+    A piped or redirected stream there defaults to the ANSI code page, which cannot encode
+    the `⇒` and `✓` markers, and `rich` would still take its legacy Windows renderer for it.
+    Both are only needed for a real terminal, so switch them off for anything else.
+    """
+    stream = sys.stderr if stderr else sys.stdout
+    legacy_windows: bool | None = None
+    if IS_WINDOWS and not stream.isatty():
+        legacy_windows = False
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    return Console(stderr=stderr, legacy_windows=legacy_windows)
+
+
 class ConsoleLog(Log):
     """`Log` implementation backed by a pair of `rich` consoles."""
 
     def __init__(self, debug: bool = False) -> None:
         """Init console log."""
-        self.__console = Console()
-        self.__err_console = Console(stderr=True)
+        self.__console = _new_console()
+        self.__err_console = _new_console(stderr=True)
         self.__debug = debug
 
     def configure(self, debug: bool) -> None:

@@ -77,14 +77,15 @@ def test_apply_with_tnplan_file_round_trips_plan_bytes(
     assert result.exit_code == 0
     argv = fake_terraform_bin.captured_argv
     assert argv[0] == "apply"
-    plan_arg_path = Path(argv[1])
+    plan_arg_path = Path(argv[-1])
     # The plan file is a NamedTemporaryFile that gets cleaned up right after
     # exec() returns, so we can't read it back post-hoc here — but the fake
     # terraform binary's *env* capture proves the temp file path was passed
     # through, and terranova's own apply() argument-building is covered at
     # the unit level in tests/it/test_binds.py. This documents the observable
     # e2e contract: a distinct plan file path is always passed as `apply`'s
-    # first positional argument when applying from a .tnplan file.
+    # last argument (terraform only accepts options before the positional
+    # plan file) when applying from a .tnplan file.
     assert plan_arg_path.name != str(tnplan_file)
 
 

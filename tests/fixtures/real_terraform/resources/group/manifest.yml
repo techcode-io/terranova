@@ -1,0 +1,13 @@
+version: "1.0"
+
+metadata:
+  name: Real Terraform Group
+  description: Uses only built-in terraform resources, so no provider has to be downloaded
+  url: https://github.com/techcode-io/terranova
+  contact: mailto:adrien.mannocci@gmail.com
+
+dependencies:
+  - source: versions.tf
+    target: 00-versions.tf
+  - source: assets
+    target: assets

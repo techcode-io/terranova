@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from terranova.io import close, write_atomic
+from terranova.io import close, temp_file, write_atomic
 
 
 class _FakeCloseable:
@@ -48,6 +48,7 @@ class TestClose:
 
 
 class TestWriteAtomic:
+    @pytest.mark.posix_only
     def test_replaces_content_and_keeps_permissions(self, tmp_path: Path) -> None:
         target = tmp_path / "file.txt"
         target.write_text("old")
@@ -69,3 +70,34 @@ class TestWriteAtomic:
             write_atomic(target, "\ud800")
         assert target.read_text() == "old"
         assert os.listdir(tmp_path) == ["file.txt"]
+
+
+class TestTempFile:
+    def test_yields_an_existing_file_with_the_content(self) -> None:
+        with temp_file(content=b"plan-bytes") as path:
+            assert path.read_bytes() == b"plan-bytes"
+
+    def test_is_empty_by_default(self) -> None:
+        with temp_file() as path:
+            assert path.read_bytes() == b""
+
+    def test_applies_the_prefix(self) -> None:
+        with temp_file(prefix="custom-") as path:
+            assert path.name.startswith("custom-")
+
+    def test_file_can_be_reopened_while_in_the_block(self) -> None:
+        # Another process (terraform) writes to it by name: no handle may stay open on it,
+        # which Windows would refuse
+        with temp_file() as path:
+            path.write_bytes(b"written elsewhere")
+            assert path.read_bytes() == b"written elsewhere"
+
+    def test_is_removed_on_exit(self) -> None:
+        with temp_file() as path:
+            pass
+        assert not path.exists()
+
+    def test_is_removed_when_the_block_raises(self) -> None:
+        with pytest.raises(RuntimeError), temp_file() as path:
+            raise RuntimeError
+        assert not path.exists()

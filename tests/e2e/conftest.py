@@ -18,11 +18,18 @@ import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
 
 import pytest
 from click.testing import CliRunner, Result
 
 from terranova.binds import Git
+from terranova.engines import EngineManager
+from terranova.exceptions import EngineError
+from terranova.resources import ResourcesEngine
+
+# Needs `terraform_data` (1.4+); pinned so the checksum-verified download is reproducible.
+REAL_TERRAFORM_VERSION: Final[str] = "1.9.8"
 
 
 @pytest.fixture(autouse=True)
@@ -72,3 +79,39 @@ def assert_result(result: Result) -> tuple[str, str | None]:
     for pattern in ["Failed", "Error"]:
         assert pattern not in [stdout, stderr]
     return stdout, stderr
+
+
+@pytest.fixture(scope="session")
+def real_terraform_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Install a real terraform with the `EngineManager`, once per test session.
+
+    The cache lives next to pytest's base temp dir, which `xdist` workers share, so the
+    manager's atomic install keeps concurrent workers safe and later runs reuse the download.
+    Without network access the dependent tests are skipped locally, but fail on CI.
+    """
+    home = tmp_path_factory.getbasetemp().parent / "engines-home"
+    with pytest.MonkeyPatch.context() as patch:
+        # `EngineManager` caches under the home directory
+        patch.setenv("HOME", home.as_posix())
+        patch.setenv("USERPROFILE", home.as_posix())
+        try:
+            binary = EngineManager().resolve(
+                ResourcesEngine("terraform", REAL_TERRAFORM_VERSION)
+            )
+        except EngineError as err:
+            if os.environ.get("CI"):
+                raise
+            pytest.skip(f"cannot install terraform {REAL_TERRAFORM_VERSION}: {err}")
+    assert binary is not None
+    return binary
+
+
+@pytest.fixture
+def real_terraform(
+    real_terraform_binary: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Put a real terraform first on `PATH`, instead of the fake one of `fake_terraform_bin`."""
+    path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{real_terraform_binary.parent}{os.pathsep}{path}")
+    return real_terraform_binary
