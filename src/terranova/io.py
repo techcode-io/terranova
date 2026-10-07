@@ -16,8 +16,8 @@
 #
 import os
 import tempfile
-from collections.abc import Sequence
-from contextlib import suppress
+from collections.abc import Generator, Sequence
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Protocol
 
@@ -38,6 +38,27 @@ def close(files: Sequence[Closeable]) -> None:
     for file in files:
         with suppress(OSError):
             file.close()
+
+
+@contextmanager
+def temp_file(prefix: str = "terranova-", content: bytes = b"") -> Generator[Path]:
+    """
+    Provide the path of a temporary file holding `content`, removed on leaving the block.
+
+    The file is closed (but kept) before it is yielded, so another process can open it:
+    Windows forbids opening a file that another handle still holds open.
+
+    Args:
+        prefix: prefix of the temporary file name.
+        content: initial binary content.
+
+    Yields:
+        path of the temporary file.
+    """
+    with tempfile.NamedTemporaryFile(prefix=prefix, delete_on_close=False) as file:
+        file.write(content)
+        file.close()
+        yield Path(file.name)
 
 
 def write_atomic(path: Path, content: str) -> None:

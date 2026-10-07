@@ -16,7 +16,6 @@
 #
 from base64 import b64encode
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import override
 
 import click
@@ -33,6 +32,7 @@ from terranova.commands.helpers import (
     write_execution_plan,
 )
 from terranova.executor import ResourceGroupResult, ResourceGroupTask
+from terranova.io import temp_file
 from terranova.resources import ResourcesManifest
 from terranova.utils import AppContext, Constants, log
 
@@ -78,13 +78,7 @@ class _PlanTask(TerraformTask):
         terraform = self.mount(manifest=self._manifest, import_vars=True)
 
         if self._out:
-            # Closed (but kept) before terraform runs: Windows forbids opening a file that
-            # another handle holds open. It is still removed on leaving the block.
-            with NamedTemporaryFile(
-                prefix="terranova-", delete_on_close=False
-            ) as file_descriptor:
-                file_descriptor.close()
-                resolved_path = Path(file_descriptor.name)
+            with temp_file() as resolved_path:
                 try:
                     terraform.plan(
                         input=self._input,
