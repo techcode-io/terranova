@@ -98,7 +98,7 @@ class ChangeSummary:
         return "\n".join(lines)
 
     @staticmethod
-    def parse(text: str) -> "ChangeSummary":
+    def parse(text: str) -> ChangeSummary:
         """Interpret a captured `terraform plan/apply -json` stream as a `ChangeSummary`."""
         to_add = to_change = to_destroy = 0
         resources: list[ResourceChange] = []
@@ -141,7 +141,7 @@ class ChangeSummary:
         )
 
     @staticmethod
-    def parse_failure(text: str, exit_code: int) -> "ChangeSummary":
+    def parse_failure(text: str, exit_code: int) -> ChangeSummary:
         """
         Summarize a failed `-json` capture, always producing at least one diagnostic.
 
@@ -175,7 +175,7 @@ class ChangeSummary:
     @staticmethod
     def _format_resource_change(
         raw_change: dict[str, object], action: object
-    ) -> "ResourceChange | None":
+    ) -> ResourceChange | None:
         """
         Build a `ResourceChange` from one `planned_change` event's `change` object.
 
@@ -228,7 +228,7 @@ class ValidationDiagnostic:
     detail: str | None = None
 
     @staticmethod
-    def parse(raw: object) -> "ValidationDiagnostic | None":
+    def parse(raw: object) -> ValidationDiagnostic | None:
         """Interpret one raw `diagnostics[]` entry, or `None` if it's not a usable one."""
         if not isinstance(raw, dict):
             return None
@@ -254,7 +254,7 @@ class ValidationResult:
     diagnostics: tuple[ValidationDiagnostic, ...] = ()
 
     @staticmethod
-    def parse(text: str) -> "ValidationResult":
+    def parse(text: str) -> ValidationResult:
         """
         Interpret the single JSON object produced by `terraform validate -json`.
 
