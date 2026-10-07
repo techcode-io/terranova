@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import io
+import os
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -43,6 +44,36 @@ def int_or_default(value: object, default: int) -> int:
 def str_or_none(value: object) -> str | None:
     """Coerce an untyped value (e.g. from `json.loads()`) to `str`, or `None`."""
     return value if isinstance(value, str) else None
+
+
+# Detected once here so the platform-specific behavior has a single, easily patched source
+IS_WINDOWS: Final[bool] = sys.platform == "win32"
+
+
+# Variables Windows processes need to initialise (sockets, DNS, temp files, executable lookup);
+# without them terraform or a python entrypoint fails to start. `HOME` has no meaning there,
+# `USERPROFILE` replaces it.
+WINDOWS_INHERIT_ENV_VARS: tuple[str, ...] = (
+    "APPDATA",
+    "COMSPEC",
+    "LOCALAPPDATA",
+    "PATHEXT",
+    "PROGRAMDATA",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+)
+
+
+def platform_env_vars() -> dict[str, str]:
+    """Variables a child process needs to start on this OS, taken from the current one."""
+    if not IS_WINDOWS:
+        return {}
+    return {
+        k: v for k in WINDOWS_INHERIT_ENV_VARS if (v := os.environ.get(k)) is not None
+    }
 
 
 class Constants:
@@ -95,7 +126,7 @@ def _new_console(stderr: bool = False) -> Console:
     """
     stream = sys.stderr if stderr else sys.stdout
     legacy_windows: bool | None = None
-    if sys.platform == "win32" and not stream.isatty():
+    if IS_WINDOWS and not stream.isatty():
         legacy_windows = False
         if isinstance(stream, io.TextIOWrapper):
             stream.reconfigure(encoding="utf-8", errors="replace")

@@ -35,9 +35,9 @@ from terranova.exceptions import (
     UnreadableManifestError,
     VersionManifestError,
 )
-from terranova.process import Command, PathCmd, platform_env_vars
+from terranova.process import Command, PathCmd
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
-from terranova.utils import Constants, serde
+from terranova.utils import Constants, platform_env_vars, serde
 
 
 @serde

@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import json
-import os
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -24,15 +25,14 @@ from typing import Final, cast, override
 from terranova.engines import ENGINE_DESCRIPTORS
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
-from terranova.process import (
-    WINDOWS_ENV_VARS,
-    Bind,
-    Command,
-    CommandNotFound,
-    EnvCmd,
-    ErrorReturnCode,
+from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
+from terranova.utils import (
+    IS_WINDOWS,
+    WINDOWS_INHERIT_ENV_VARS,
+    int_or_default,
+    log,
+    str_or_none,
 )
-from terranova.utils import int_or_default, log, str_or_none
 
 _DIAGNOSTIC_RULE: Final[str] = "─" * 60
 _MAX_FALLBACK_DIAGNOSTIC_LENGTH: Final[int] = 4000
@@ -340,7 +340,7 @@ class Terraform(Bind):
             "GOOGLE_GHA_CREDS_PATH",
             "HOME",
             "PATH",
-            *(WINDOWS_ENV_VARS if os.name == "nt" else ()),
+            *(WINDOWS_INHERIT_ENV_VARS if IS_WINDOWS else ()),
         )
 
         # Predicate for allowed env vars

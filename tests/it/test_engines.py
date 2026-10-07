@@ -17,7 +17,6 @@
 import hashlib
 import io
 import json
-import os
 import platform
 import time
 import zipfile
@@ -36,6 +35,7 @@ from terranova.exceptions import (
     UnsupportedEnginePlatformError,
 )
 from terranova.resources import ResourcesEngine, ResourcesManifest, ResourcesMetadata
+from terranova.utils import IS_WINDOWS
 
 LINUX = EnginePlatform("linux", "amd64")
 WINDOWS = EnginePlatform("windows", "amd64")
@@ -161,7 +161,7 @@ def test_download_then_cache_hit(
     binary = manager.resolve(engine)
     assert binary is not None
     assert binary == cache_dir / engine_name / "1.9.5" / _binary_name(engine_name)
-    assert binary.is_file() and (os.name == "nt" or binary.stat().st_mode & 0o100)
+    assert binary.is_file() and (IS_WINDOWS or binary.stat().st_mode & 0o100)
     assert len(http.calls) == 2
 
     assert manager.resolve(engine) == binary

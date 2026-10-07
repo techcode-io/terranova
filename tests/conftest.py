@@ -10,7 +10,7 @@ from typing import cast, override
 
 import pytest
 
-from terranova.utils import log
+from terranova.utils import IS_WINDOWS, log
 
 
 class _CaseInsensitiveEnv(dict[str, str]):
@@ -36,7 +36,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    if sys.platform != "win32":
+    if not IS_WINDOWS:
         return
     skip = pytest.mark.skip(reason="requires a POSIX environment")
     for item in items:
@@ -151,7 +151,7 @@ class FakeTerraform:
         env = cast("dict[str, str]", capture["env"])
         # Python upper-cases environment names on Windows, so `TF_VAR_region` is captured
         # as `TF_VAR_REGION`: look names up case-insensitively there.
-        return _CaseInsensitiveEnv(env) if os.name == "nt" else env
+        return _CaseInsensitiveEnv(env) if IS_WINDOWS else env
 
     @property
     def was_invoked(self) -> bool:
@@ -164,7 +164,7 @@ def fake_terraform_bin(
 ) -> FakeTerraform:
     bin_dir = tmp_path / "fake_bin"
     bin_dir.mkdir(exist_ok=True)
-    if os.name == "nt":
+    if IS_WINDOWS:
         # No shebangs on Windows: a `.cmd` shim, resolved through PATHEXT, runs the script.
         script_path = bin_dir / "terraform.py"
         script_path.write_text(_FAKE_TERRAFORM_SCRIPT)

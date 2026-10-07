@@ -16,6 +16,7 @@
 #
 import os
 from pathlib import Path
+from typing import Final
 
 import click
 from click.exceptions import Exit
@@ -28,9 +29,11 @@ from terranova.commands.helpers import (
 )
 from terranova.exceptions import ExplainedError
 from terranova.process import ErrorReturnCode
-from terranova.utils import AppContext, log
+from terranova.utils import IS_WINDOWS, AppContext, log
 
-_WINDOWS_SYMLINK_HINT = "On Windows, enable Developer Mode or run as administrator to allow creating symbolic links"
+_WINDOWS_SYMLINK_HINT: Final[str] = (
+    "On Windows, enable Developer Mode or run as administrator to allow creating symbolic links"
+)
 
 
 @click.command("init")
@@ -121,7 +124,7 @@ def init(
                             f"create the symbolic link: {dependency.target}",
                             ExplainedError(
                                 str(err),
-                                _WINDOWS_SYMLINK_HINT if os.name == "nt" else None,
+                                _WINDOWS_SYMLINK_HINT if IS_WINDOWS else None,
                             ),
                         )
         finally:
