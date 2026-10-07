@@ -45,6 +45,15 @@ ARCH_NAMES: Final[dict[str, str]] = {
 }
 
 
+def _stage_bundle(version: str, system: str) -> Path:
+    """Rename the built bundle after its version, system and architecture."""
+    machine = platform.machine().lower()
+    arch = ARCH_NAMES.get(machine, machine)
+    bundle_dir = DIST_DIR / f"terranova-{version}-{system}-{arch}"
+    (DIST_DIR / "terranova").replace(bundle_dir)
+    return bundle_dir
+
+
 def run() -> None:
     """Build a standalone terranova bundle for the current platform."""
     version = Uv().project_version()
@@ -63,11 +72,11 @@ def run() -> None:
         SPEC_PATH.unlink(missing_ok=True)
 
     # Make terranova executable
-    terranova_exec = (
-        DIST_DIR
-        / "terranova"
-        / ("terranova.exe" if system == "windows" else "terranova")
-    )
+    match system:
+        case "windows":
+            terranova_exec = DIST_DIR / "terranova" / "terranova.exe"
+        case _:
+            terranova_exec = DIST_DIR / "terranova" / "terranova"
     terranova_exec.chmod(terranova_exec.stat().st_mode | stat.S_IEXEC)
 
     # Check terranova bundle is working
@@ -81,19 +90,19 @@ def run() -> None:
             completions_dir / filename
         ).exec()
 
-    # Create a tarball for macOS, a zip for Windows
-    if system in ("darwin", "windows"):
-        machine = platform.machine().lower()
-        arch = ARCH_NAMES.get(machine, machine)
-        bundle_dir = DIST_DIR / f"terranova-{version}-{system}-{arch}"
-        (DIST_DIR / "terranova").replace(bundle_dir)
-        if system == "windows":
+    # Archive the bundle: a tarball for macOS, a zip for Windows. Linux ships as packages.
+    match system:
+        case "darwin":
+            bundle_dir = _stage_bundle(version, system)
+            Command("tar").args(
+                "-C",
+                bundle_dir.as_posix(),
+                "-czf",
+                f"{bundle_dir.as_posix()}.tar.gz",
+                "./",
+            ).inherit_out().exec()
+        case "windows":
+            bundle_dir = _stage_bundle(version, system)
             shutil.make_archive(bundle_dir.as_posix(), "zip", root_dir=bundle_dir)
-            return
-        Command("tar").args(
-            "-C",
-            bundle_dir.as_posix(),
-            "-czf",
-            (DIST_DIR / f"terranova-{version}-{system}-{arch}.tar.gz").as_posix(),
-            "./",
-        ).inherit_out().exec()
+        case _:
+            pass
