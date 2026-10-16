@@ -6,6 +6,7 @@ from typing import Final
 
 import click
 import pytest
+import yaml
 from click.exceptions import Exit
 
 from terranova.binds import Git, Terraform
@@ -53,6 +54,20 @@ def _write_manifest_dir(base: Path, *parts: str) -> Path:
     resource_dir = base.joinpath(*parts)
     resource_dir.mkdir(parents=True, exist_ok=True)
     (resource_dir / "manifest.yml").write_text(textwrap.dedent(_VALID_MANIFEST))
+    return resource_dir
+
+
+def _write_manifest_dir_depending_on(base: Path, name: str, *sources: str) -> Path:
+    resource_dir = base / name
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "version": "1.0",
+        "metadata": {"name": name, "description": "test"},
+        "dependencies": [
+            {"source": source, "target": Path(source).name} for source in sources
+        ],
+    }
+    (resource_dir / "manifest.yml").write_text(yaml.safe_dump(manifest))
     return resource_dir
 
 
@@ -521,6 +536,82 @@ class TestAutoScopeResourceDirs:
         _init_git_repo(tmp_path)
 
         assert auto_scope_resource_dirs(tmp_path, resources_dir) == []
+
+
+class TestAutoScopeSharedDependencies:
+    def test_changed_shared_file_selects_every_dependent_group(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        shared = tmp_path / "shared" / "providers"
+        shared.mkdir(parents=True)
+        (shared / "github.tf").write_text("# v1\n")
+        group_a = _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_a", "providers/github.tf"
+        )
+        group_b = _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_b", "providers/github.tf"
+        )
+        _write_manifest_dir(tmp_path, "resources", "group_c")
+        _init_git_repo(tmp_path)
+
+        (shared / "github.tf").write_text("# v2\n")
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir)
+
+        assert result == [(group_a, "group_a"), (group_b, "group_b")]
+
+    def test_changed_file_inside_shared_directory_source_matches_by_prefix(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        shared = tmp_path / "shared" / "scripts" / "nested"
+        shared.mkdir(parents=True)
+        (shared / "run.sh").write_text("echo 1\n")
+        group_a = _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_a", "scripts"
+        )
+        _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_b", "providers/other.tf"
+        )
+        _init_git_repo(tmp_path)
+
+        (shared / "run.sh").write_text("echo 2\n")
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir)
+
+        assert result == [(group_a, "group_a")]
+
+    def test_unreferenced_shared_file_selects_nothing(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "unused.tf").write_text("# v1\n")
+        _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_a", "providers/github.tf"
+        )
+        _init_git_repo(tmp_path)
+
+        (shared / "unused.tf").write_text("# v2\n")
+
+        assert auto_scope_resource_dirs(tmp_path, resources_dir) == []
+
+    def test_group_changed_directly_and_through_shared_is_listed_once(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "github.tf").write_text("# v1\n")
+        group_a = _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_a", "github.tf"
+        )
+        _init_git_repo(tmp_path)
+
+        (shared / "github.tf").write_text("# v2\n")
+        (group_a / "main.tf").write_text('resource "aws_x" "y" {}\n')
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir)
+
+        assert result == [(group_a, "group_a")]
 
 
 class TestResolveResourceDirs:

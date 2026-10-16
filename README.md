@@ -334,6 +334,8 @@ terranova apply --strategy parallel --auto-approve --fail-at-end
   files (respecting `.gitignore`).
 - Each changed file is mapped to its nearest ancestor directory containing a `manifest.yml`; a change
   outside any resource group is ignored, and several changes in one group select it only once.
+- A change below the `shared` directory selects every resource group whose manifest `dependencies` reference
+  it: a `source` that is a directory matches any file inside it.
 - It can't be combined with an explicit `path` (or, for `apply`, a `.tnplan` file), and it must be run
   from inside a git repository.
 - With `docs`, the docs directory isn't wiped first, so documentation of groups outside the scope is kept.
