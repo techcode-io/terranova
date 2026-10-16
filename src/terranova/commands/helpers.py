@@ -273,12 +273,46 @@ def _match_resource_dirs(
     return sorted(matched.values(), key=lambda entry: entry[1])
 
 
+def _match_shared_dependents(
+    shared_dir: Path,
+    all_dirs: list[tuple[Path, str]],
+    changed_files: list[Path],
+) -> list[tuple[Path, str]]:
+    """
+    Resource-group dirs whose manifest `dependencies` cover a changed shared file.
+
+    A dependency `source` is a file or a directory below `shared_dir`; a changed
+    file matches it when it is that file or lives inside that directory. Manifests
+    are only read when at least one changed file is below `shared_dir`.
+    """
+    shared_root = shared_dir.resolve()
+    # Resolve the parent only: a changed file may itself be a symlink to shared.
+    changed_shared = [
+        resolved
+        for resolved in (f.parent.resolve() / f.name for f in changed_files)
+        if resolved.is_relative_to(shared_root)
+    ]
+    if not changed_shared:
+        return []
+
+    matched: list[tuple[Path, str]] = []
+    for full_path, rel_path in all_dirs:
+        manifest = read_manifest(full_path)
+        for dependency in manifest.dependencies or []:
+            source = (shared_root / dependency.source).resolve()
+            if any(changed.is_relative_to(source) for changed in changed_shared):
+                matched.append((full_path, rel_path))
+                break
+    return matched
+
+
 def auto_scope_resource_dirs(
     conf_dir: Path, resources_dir: Path
 ) -> list[tuple[Path, str]]:
     """
     Scope resource dirs to those affected by the current git diff (working
     tree and staged changes vs HEAD, including untracked files).
+    A change below the `shared` dir also selects every group depending on it.
     This function handle errors by logging and exiting.
     """
     # `conf_dir` is guaranteed to exist (`--conf-dir` requires it), unlike
@@ -296,7 +330,13 @@ def auto_scope_resource_dirs(
     changed_files = [root / rel for rel in git.changed_files()]
 
     all_dirs = find_all_resource_dirs(resources_dir)
-    return _match_resource_dirs(resources_dir, all_dirs, changed_files)
+    matched = dict(_match_resource_dirs(resources_dir, all_dirs, changed_files))
+    shared_dir = AppContext(conf_dir=conf_dir).shared_dir
+    for full_path, rel_path in _match_shared_dependents(
+        shared_dir, all_dirs, changed_files
+    ):
+        matched[full_path] = rel_path
+    return sorted(matched.items(), key=lambda entry: entry[1])
 
 
 def resolve_resource_dirs(
