@@ -265,6 +265,23 @@ def test_apply_auto_scope_and_path_or_plan_together_is_usage_error(
     assert "--auto-scope" in result.output
 
 
+def test_apply_base_without_auto_scope_is_usage_error(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "apply", "--base", "HEAD~1"],
+    )
+
+    assert result.exit_code != 0
+    assert "--base" in result.output
+
+
 def test_apply_with_non_string_tnplan_value_raises_type_error(
     runner: CliRunner, tmp_path: Path
 ) -> None:

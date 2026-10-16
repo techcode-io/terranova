@@ -25,6 +25,7 @@ from jinja2 import Environment, PackageLoader
 
 from terranova.commands.helpers import (
     auto_scope_option,
+    base_option,
     complete_resource_path,
     discover_resources,
     read_manifest,
@@ -42,6 +43,7 @@ def format_markdown(text: str) -> str:
 @click.command("docs")
 @click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
+@base_option
 @click.option(
     "--docs-dir",
     help="Docs directory path.",
@@ -50,10 +52,18 @@ def format_markdown(text: str) -> str:
     default="./docs",
 )
 @click.pass_obj
-def docs(ctx: AppContext, path: str | None, auto_scope: bool, docs_dir: Path) -> None:
+def docs(
+    ctx: AppContext,
+    path: str | None,
+    auto_scope: bool,
+    base: str | None,
+    docs_dir: Path,
+) -> None:
     """Generate documentation for all resources."""
     # Find all resources manifests
-    paths = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
+    paths = resolve_resource_dirs(
+        ctx.conf_dir, ctx.resources_dir, path, auto_scope, base
+    )
     jobs: list[tuple[Path, Path]] = [
         (full_path, docs_dir.joinpath(rel_path)) for full_path, rel_path in paths
     ]

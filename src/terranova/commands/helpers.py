@@ -29,6 +29,7 @@ from terranova.binds import Git, Terraform
 from terranova.engines import default_engine_manager
 from terranova.exceptions import (
     EngineError,
+    GitBaseRefError,
     GitRepositoryError,
     GraphError,
     ImportOutputError,
@@ -57,6 +58,16 @@ auto_scope_option = click.option(
     is_flag=True,
 )
 """Shared `--auto-scope`/`-A` option for `plan`, `apply`, `destroy` and `docs`."""
+
+base_option = click.option(
+    "--base",
+    help="With `--auto-scope`, compare against the merge base of this git ref "
+    + "and HEAD (e.g. `origin/main`) instead of HEAD, so changes already "
+    + "committed on the branch are included.",
+    type=str,
+    default=None,
+)
+"""Shared `--base` option, only valid together with `--auto-scope`."""
 
 flat_strategy_option = click.option(
     "--strategy",
@@ -307,12 +318,13 @@ def _match_shared_dependents(
 
 
 def auto_scope_resource_dirs(
-    conf_dir: Path, resources_dir: Path
+    conf_dir: Path, resources_dir: Path, base: str | None = None
 ) -> list[tuple[Path, str]]:
     """
     Scope resource dirs to those affected by the current git diff (working
     tree and staged changes vs HEAD, including untracked files).
     A change below the `shared` dir also selects every group depending on it.
+    With `base`, changes are taken relative to the merge base of `base` and HEAD.
     This function handle errors by logging and exiting.
     """
     # `conf_dir` is guaranteed to exist (`--conf-dir` requires it), unlike
@@ -327,7 +339,13 @@ def auto_scope_resource_dirs(
             GitRepositoryError(conf_dir),
         )
     git.cwd(root)
-    changed_files = [root / rel for rel in git.changed_files()]
+    base_commit = "HEAD"
+    if base is not None:
+        try:
+            base_commit = git.merge_base(base)
+        except ErrorReturnCode:
+            log.fatal(f"resolve the git base ref `{base}`", GitBaseRefError(base))
+    changed_files = [root / rel for rel in git.changed_files(base_commit)]
 
     all_dirs = find_all_resource_dirs(resources_dir)
     matched = dict(_match_resource_dirs(resources_dir, all_dirs, changed_files))
@@ -339,16 +357,27 @@ def auto_scope_resource_dirs(
     return sorted(matched.items(), key=lambda entry: entry[1])
 
 
+def check_base_requires_auto_scope(auto_scope: bool, base: str | None) -> None:
+    """Reject `--base` given without `--auto-scope`."""
+    if base is not None and not auto_scope:
+        raise click.UsageError("`--base` requires `--auto-scope`/`-A`.")
+
+
 def resolve_resource_dirs(
-    conf_dir: Path, resources_dir: Path, path: str | None, auto_scope: bool
+    conf_dir: Path,
+    resources_dir: Path,
+    path: str | None,
+    auto_scope: bool,
+    base: str | None = None,
 ) -> list[tuple[Path, str]]:
     """Shared `path`/`--auto-scope` resolution for `plan`, `destroy` and `docs`."""
+    check_base_requires_auto_scope(auto_scope, base)
     if auto_scope and path:
         raise click.UsageError(
             "`--auto-scope`/`-A` can't be combined with an explicit `path`."
         )
     if auto_scope:
-        return auto_scope_resource_dirs(conf_dir, resources_dir)
+        return auto_scope_resource_dirs(conf_dir, resources_dir, base)
     return resource_dirs(resources_dir, path)
 
 

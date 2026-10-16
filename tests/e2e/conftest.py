@@ -27,6 +27,7 @@ from terranova.binds import Git
 from terranova.engines import EngineManager
 from terranova.exceptions import EngineError
 from terranova.resources import ResourcesEngine
+from tests.conftest import commit_all
 
 # Needs `terraform_data` (1.4+); pinned so the checksum-verified download is reproducible.
 REAL_TERRAFORM_VERSION: Final[str] = "1.9.8"
@@ -62,10 +63,8 @@ def copy_as_git_repo(fixture_dir: Path, dest: Path) -> None:
     """
     shutil.copytree(fixture_dir, dest)
 
-    git = Git(dest)
-    git.init()
-    git.add()
-    git.commit("initial", author=("test", "test@example.com"))
+    Git(dest).init()
+    commit_all(dest, "initial")
 
 
 def assert_result(result: Result) -> tuple[str, str | None]:
