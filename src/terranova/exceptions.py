@@ -127,6 +127,18 @@ class GitRepositoryError(ExplainedError):
         )
 
 
+class GitBaseRefError(ExplainedError):
+    """Represents a failure to resolve the git base ref given to `--base`."""
+
+    def __init__(self, ref: str) -> None:
+        """Init git base ref error."""
+        super().__init__(
+            cause=f"can't compute the merge base between `{ref}` and HEAD",
+            resolution="Check that the ref exists and that the history is available "
+            + "(e.g. `fetch-depth: 0` on a CI checkout).",
+        )
+
+
 class GraphError(ExplainedError):
     """Represents an error building a dependency graph between resource groups."""
 

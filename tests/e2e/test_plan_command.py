@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from terranova.cli import main
 from tests import PROJECT_TESTS_FIXTURES_DIR
-from tests.conftest import FakeTerraform
+from tests.conftest import FakeTerraform, commit_all
 from tests.e2e.conftest import copy_as_git_repo
 
 
@@ -238,6 +238,44 @@ def test_plan_auto_scope_and_path_together_is_usage_error(
 
     assert result.exit_code != 0
     assert "--auto-scope" in result.output
+
+
+def test_plan_auto_scope_base_includes_committed_changes(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+    manifest = conf_dir / "resources" / "group_a" / "manifest.yml"
+    manifest.write_text(manifest.read_text() + "\n# changed\n")
+    commit_all(conf_dir, "second")
+
+    # The working tree is clean (as in CI): only `--base` sees the commit.
+    result = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "plan", "-A", "--base", "HEAD~1"],
+    )
+
+    assert result.exit_code == 0
+    assert "group_a" in result.stdout
+    assert "group_b" not in result.stdout
+
+
+def test_plan_base_without_auto_scope_is_usage_error(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    fixture_dir = PROJECT_TESTS_FIXTURES_DIR / "plan_multi_group"
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(fixture_dir, conf_dir)
+
+    result = runner.invoke(
+        main, args=["--conf-dir", str(conf_dir), "plan", "--base", "HEAD~1"]
+    )
+
+    assert result.exit_code != 0
+    assert "--base" in result.output
 
 
 def test_plan_strategy_parallel_fail_at_end_stops_next_wave(

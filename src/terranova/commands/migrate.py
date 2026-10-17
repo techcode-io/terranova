@@ -19,6 +19,7 @@ from click.exceptions import Exit
 
 from terranova.commands.helpers import (
     auto_scope_option,
+    base_option,
     complete_resource_path,
     resolve_resource_dirs,
 )
@@ -31,6 +32,7 @@ from terranova.utils import AppContext, Constants, log
 @click.command("migrate")
 @click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
+@base_option
 @click.option(
     "--dry-run",
     help="Report what would change without writing any manifest.",
@@ -38,9 +40,17 @@ from terranova.utils import AppContext, Constants, log
     default=False,
 )
 @click.pass_obj
-def migrate(ctx: AppContext, path: str | None, auto_scope: bool, dry_run: bool) -> None:
+def migrate(
+    ctx: AppContext,
+    path: str | None,
+    auto_scope: bool,
+    base: str | None,
+    dry_run: bool,
+) -> None:
     """Migrate manifests to the latest manifest version in batch."""
-    dirs = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
+    dirs = resolve_resource_dirs(
+        ctx.conf_dir, ctx.resources_dir, path, auto_scope, base
+    )
 
     # Recipes prompt on first use only, then the answers apply to every manifest.
     book = RecipeBook()

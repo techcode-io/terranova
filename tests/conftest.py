@@ -10,6 +10,7 @@ from typing import cast, override
 
 import pytest
 
+from terranova.binds import Git
 from terranova.utils import IS_WINDOWS, log
 
 
@@ -42,6 +43,13 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if "posix_only" in item.keywords:
             item.add_marker(skip)
+
+
+def commit_all(path: Path, message: str) -> None:
+    """Stage everything in the git repo at `path` and commit it."""
+    git = Git(path)
+    git.add()
+    git.commit(message, author=("test", "test@example.com"))
 
 
 _FAKE_TERRAFORM_SCRIPT = """#!/usr/bin/env python3
