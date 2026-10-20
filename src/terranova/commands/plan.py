@@ -25,6 +25,7 @@ from terranova.binds import TerraformChangeError
 from terranova.commands.helpers import (
     TerraformTask,
     auto_scope_option,
+    base_option,
     complete_resource_path,
     execute_tasks,
     read_manifests_and_waves,
@@ -112,6 +113,7 @@ class _PlanTask(TerraformTask):
 @click.command("plan")
 @click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
+@base_option
 @click.option(
     "--input/--no-input",
     help="Ask for input for variables if not directly set.",
@@ -172,6 +174,7 @@ def plan(
     ctx: AppContext,
     path: str | None,
     auto_scope: bool,
+    base: str | None,
     input: bool,
     no_color: bool,
     parallelism: int,
@@ -183,7 +186,9 @@ def plan(
 ) -> None:
     """Show changes required by the current configuration."""
     # Find all resources manifests
-    paths = resolve_resource_dirs(ctx.conf_dir, ctx.resources_dir, path, auto_scope)
+    paths = resolve_resource_dirs(
+        ctx.conf_dir, ctx.resources_dir, path, auto_scope, base
+    )
 
     # Execution plan
     execution_plan: dict[str, str] = {}

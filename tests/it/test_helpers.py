@@ -32,7 +32,7 @@ from terranova.resources import (
     Selector,
 )
 from terranova.utils import AppContext
-from tests.conftest import FakeTerraform
+from tests.conftest import FakeTerraform, commit_all
 
 _VALID_MANIFEST: Final[str] = """
 version: "1.0"
@@ -44,10 +44,8 @@ metadata:
 
 def _init_git_repo(path: Path) -> None:
     """Init a real git repo at `path` and commit everything currently in it."""
-    git = Git(path)
-    git.init()
-    git.add()
-    git.commit("initial", author=("test", "test@example.com"))
+    Git(path).init()
+    commit_all(path, "initial")
 
 
 def _write_manifest_dir(base: Path, *parts: str) -> Path:
@@ -635,6 +633,93 @@ class TestAutoScopeSharedDependencies:
         result = auto_scope_resource_dirs(tmp_path, resources_dir)
 
         assert result == [(group_a, "group_a")]
+
+
+class TestAutoScopeBaseRef:
+    def test_base_picks_up_committed_changes_since_the_merge_base(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        _write_manifest_dir(tmp_path, "resources", "group_b")
+        _init_git_repo(tmp_path)
+        (group_a / "main.tf").write_text('resource "aws_x" "y" {}\n')
+        commit_all(tmp_path, "second")
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir, base="HEAD~1")
+
+        assert result == [(group_a, "group_a")]
+
+    def test_base_also_includes_uncommitted_changes(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        group_b = _write_manifest_dir(tmp_path, "resources", "group_b")
+        _init_git_repo(tmp_path)
+        (group_a / "main.tf").write_text('resource "aws_x" "y" {}\n')
+        commit_all(tmp_path, "second")
+        (group_b / "main.tf").write_text('resource "aws_x" "z" {}\n')
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir, base="HEAD~1")
+
+        assert result == [(group_a, "group_a"), (group_b, "group_b")]
+
+    def test_base_applies_to_shared_dependencies(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        (shared / "github.tf").write_text("# v1\n")
+        group_a = _write_manifest_dir_depending_on(
+            tmp_path / "resources", "group_a", "github.tf"
+        )
+        _init_git_repo(tmp_path)
+        (shared / "github.tf").write_text("# v2\n")
+        commit_all(tmp_path, "second")
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir, base="HEAD~1")
+
+        assert result == [(group_a, "group_a")]
+
+    def test_unknown_base_ref_calls_log_fatal(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        _init_git_repo(tmp_path)
+
+        with pytest.raises(Exit):
+            auto_scope_resource_dirs(tmp_path, resources_dir, base="no-such-ref")
+
+
+class TestAutoScopeBaseRefEdgeCases:
+    def test_renamed_file_selects_both_source_and_destination_groups(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        group_a = _write_manifest_dir(tmp_path, "resources", "group_a")
+        group_b = _write_manifest_dir(tmp_path, "resources", "group_b")
+        (group_a / "main.tf").write_text('resource "aws_x" "y" {}\n' * 20)
+        _init_git_repo(tmp_path)
+        (group_a / "main.tf").rename(group_b / "main.tf")
+        commit_all(tmp_path, "move")
+
+        result = auto_scope_resource_dirs(tmp_path, resources_dir, base="HEAD~1")
+
+        assert result == [(group_a, "group_a"), (group_b, "group_b")]
+
+    @pytest.mark.parametrize("base", ["", "--no-such-option", "no-such-ref"])
+    def test_invalid_base_calls_log_fatal(
+        self, tmp_path: Path, resources_dir: Path, base: str
+    ) -> None:
+        _write_manifest_dir(tmp_path, "resources", "group_a")
+        _init_git_repo(tmp_path)
+
+        with pytest.raises(Exit):
+            auto_scope_resource_dirs(tmp_path, resources_dir, base=base)
+
+    def test_empty_base_without_auto_scope_raises_usage_error(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        with pytest.raises(click.UsageError):
+            resolve_resource_dirs(tmp_path, resources_dir, None, False, "")
 
 
 class TestResolveResourceDirs:

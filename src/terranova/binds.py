@@ -584,18 +584,31 @@ class Git(Bind):
         ).exec()
         return capture.getvalue().strip()
 
-    def changed_files(self) -> list[str]:
+    def merge_base(self, ref: str) -> str:
+        """Show the best common ancestor commit between `ref` and HEAD."""
+        capture = StringIO()
+        # `--` keeps a ref that looks like an option from being parsed as one, and
+        # stderr is kept out of `capture` so a git warning can't end up in the hash.
+        self._cmd.args("merge-base", "--", ref, "HEAD").stdout(capture).stderr(
+            StringIO()
+        ).exec()
+        return capture.getvalue().strip()
+
+    def changed_files(self, base: str = "HEAD") -> list[str]:
         """
-        List files changed relative to HEAD (staged + unstaged) plus untracked files.
+        List files changed relative to `base` (staged + unstaged) plus untracked files.
+
+        Args:
+            base: commit-ish the working tree is compared to.
 
         Returns:
             paths relative to `cwd()` - callers should set `cwd()` to the repo
             root first (via `repo_root()`) so output is unambiguous.
         """
         capture = StringIO()
-        self._cmd.args("diff", "--name-only", "HEAD").stdout(capture).stderr(
+        self._cmd.args("diff", "--name-only", "--no-renames", base).stdout(
             capture
-        ).exec()
+        ).stderr(capture).exec()
         tracked = [line for line in capture.getvalue().splitlines() if line]
 
         capture = StringIO()

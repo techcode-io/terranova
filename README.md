@@ -351,6 +351,10 @@ terranova apply --strategy parallel --auto-approve --fail-at-end
   outside any resource group is ignored, and several changes in one group select it only once.
 - A change below the `shared` directory selects every resource group whose manifest `dependencies` reference
   it: a `source` that is a directory matches any file inside it.
+- With `--base <ref>` (e.g. `--base origin/main`), changes are compared to the merge base of `<ref>` and
+  `HEAD` instead of `HEAD`. Commits already made on the branch are included, along with staged, unstaged and
+  untracked changes. This is what you want in CI, where the working tree is clean. `--base` requires
+  `--auto-scope`, and the history must be available (e.g. `fetch-depth: 0` on a CI checkout).
 - It can't be combined with an explicit `path` (or, for `apply`, a `.tnplan` file), and it must be run
   from inside a git repository.
 - With `docs`, the docs directory isn't wiped first, so documentation of groups outside the scope is kept.
@@ -358,6 +362,7 @@ terranova apply --strategy parallel --auto-approve --fail-at-end
 ```bash
 terranova plan --auto-scope
 terranova apply -A --auto-approve
+terranova plan -A --base origin/main
 ```
 
 - To apply exactly what was planned, combine it with `plan --out`: the saved `.tnplan` file only contains
