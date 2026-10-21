@@ -23,9 +23,9 @@ from terranova.commands.helpers import (
     complete_resource_path,
     discover_resources,
     execute_tasks,
-    flat_group_concurrency_option,
     flat_strategy_option,
     flat_wave,
+    group_concurrency_option,
     resource_dirs,
 )
 from terranova.exceptions import InvalidResourcesError
@@ -74,7 +74,7 @@ class _ValidateTask(TerraformTask):
     is_flag=True,
 )
 @flat_strategy_option
-@flat_group_concurrency_option
+@group_concurrency_option
 @click.pass_obj
 def validate(
     ctx: AppContext,

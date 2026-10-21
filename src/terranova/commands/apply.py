@@ -31,6 +31,7 @@ from terranova.commands.helpers import (
     complete_resource_path,
     execute_tasks,
     expand_with_dependents,
+    group_concurrency_option,
     include_dependents_option,
     parse_execution_plan,
     read_manifests_and_waves,
@@ -125,14 +126,7 @@ class _ApplyTask(TerraformTask):
     type=click.Choice(["sequential", "parallel"], case_sensitive=False),
     default="sequential",
 )
-@click.option(
-    "--group-concurrency",
-    help="With `--strategy parallel`, the maximum number of resource groups run "
-    + "concurrently within a wave. Distinct from terraform's own per-process "
-    + "resource concurrency. Defaults to a sane pool size if unset.",
-    type=int,
-    default=None,
-)
+@group_concurrency_option
 @click.pass_obj
 def apply(
     ctx: AppContext,

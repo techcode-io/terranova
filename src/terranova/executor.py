@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from abc import ABC, abstractmethod
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -22,6 +23,17 @@ from typing import Literal, Protocol, override
 
 from terranova.graph import Wave, normalize_rel_path
 from terranova.process import ErrorReturnCode
+
+
+def default_group_concurrency() -> int:
+    """
+    Default cap on resource groups run concurrently under `--strategy parallel`.
+
+    Each group runs a terraform/tofu process, which is CPU-heavy, so one slot
+    per usable core (honoring CPU affinity) is a sensible ceiling. Falls back
+    to 1 when the core count is unknown.
+    """
+    return os.process_cpu_count() or 1
 
 
 class ResourceGroupTask(ABC):
@@ -164,7 +176,9 @@ class ParallelExecutor(Executor):
         observer: ExecutorObserver | None = None,
     ) -> None:
         """Init the parallel executor."""
-        self.__max_workers = max_workers
+        self.__max_workers = (
+            max_workers if max_workers is not None else default_group_concurrency()
+        )
         self.__observer: ExecutorObserver = (
             observer if observer is not None else _NoopObserver()
         )

@@ -23,9 +23,9 @@ from terranova.commands.helpers import (
     TerraformTask,
     complete_resource_path,
     execute_tasks,
-    flat_group_concurrency_option,
     flat_strategy_option,
     flat_wave,
+    group_concurrency_option,
     resource_dirs,
 )
 from terranova.executor import ResourceGroupTask
@@ -47,7 +47,7 @@ class _FmtTask(TerraformTask):
 @click.command("fmt")
 @click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @flat_strategy_option
-@flat_group_concurrency_option
+@group_concurrency_option
 @click.pass_obj
 def fmt(
     ctx: AppContext, path: str | None, strategy: str, group_concurrency: int | None
