@@ -319,7 +319,7 @@ engine:
 - `plan`, `apply`, `fmt` and `validate` also accept `--strategy parallel` to run independent resource
   groups concurrently instead.
 - Use `--group-concurrency <n>` to cap how many resource groups run at once under `--strategy parallel`
-  (defaults to a sane pool size if unset). This is distinct from `--parallelism`, which limits terraform's
+  (defaults to the number of CPU cores if unset). This is distinct from `--parallelism`, which limits terraform's
   own resource-level concurrency inside a single invocation.
 - Use `--fail-at-end` to let unaffected resource groups keep running after a failure instead of stopping
   the whole run immediately.

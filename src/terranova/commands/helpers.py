@@ -89,14 +89,15 @@ flat_strategy_option = click.option(
 ordering concern (`fmt`, `validate` - see `terranova.commands.execution.flat_wave`).
 `plan`/`apply` define their own, worded around dependency order."""
 
-flat_group_concurrency_option = click.option(
+group_concurrency_option = click.option(
     "--group-concurrency",
     help="With `--strategy parallel`, the maximum number of resource groups run "
-    + "concurrently. Defaults to a sane pool size if unset.",
+    + "concurrently. Distinct from terraform's own per-process resource "
+    + "concurrency. Defaults to the number of CPU cores.",
     type=int,
     default=None,
 )
-"""Shared `--group-concurrency` option, paired with `flat_strategy_option`."""
+"""Shared `--group-concurrency` option, used by `plan`, `apply`, `fmt` and `validate`."""
 
 
 class SelectorType(click.ParamType[Selector]):
