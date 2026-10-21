@@ -43,6 +43,7 @@ from terranova.graph import (
     build_dependency_graph,
     compute_waves,
     normalize_rel_path,
+    with_dependents,
 )
 from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
@@ -68,6 +69,14 @@ base_option = click.option(
     default=None,
 )
 """Shared `--base` option, only valid together with `--auto-scope`."""
+
+include_dependents_option = click.option(
+    "--include-dependents",
+    help="With `--auto-scope`, also include the resource groups that import "
+    + "(directly or not) from a selected one, ordered after their sources.",
+    is_flag=True,
+)
+"""Shared `--include-dependents` option, only valid together with `--auto-scope`."""
 
 flat_strategy_option = click.option(
     "--strategy",
@@ -317,6 +326,24 @@ def _match_shared_dependents(
     return matched
 
 
+def expand_with_dependents(
+    resources_dir: Path, selected: list[tuple[Path, str]]
+) -> list[tuple[Path, str]]:
+    """Add to `selected` every group that transitively imports from one of them."""
+    if not selected:
+        return selected
+    all_dirs = find_all_resource_dirs(resources_dir)
+    manifests = {rel_path: read_manifest(full_path) for full_path, rel_path in all_dirs}
+    graph = build_dependency_graph(all_dirs, manifests)
+    keep = with_dependents(
+        graph, {normalize_rel_path(rel_path) for _, rel_path in selected}
+    )
+    return sorted(
+        (entry for entry in all_dirs if normalize_rel_path(entry[1]) in keep),
+        key=lambda entry: entry[1],
+    )
+
+
 def auto_scope_resource_dirs(
     conf_dir: Path, resources_dir: Path, base: str | None = None
 ) -> list[tuple[Path, str]]:
@@ -361,6 +388,14 @@ def check_base_requires_auto_scope(auto_scope: bool, base: str | None) -> None:
     """Reject `--base` given without `--auto-scope`."""
     if base is not None and not auto_scope:
         raise click.UsageError("`--base` requires `--auto-scope`/`-A`.")
+
+
+def check_dependents_require_auto_scope(
+    auto_scope: bool, include_dependents: bool
+) -> None:
+    """Reject `--include-dependents` given without `--auto-scope`."""
+    if include_dependents and not auto_scope:
+        raise click.UsageError("`--include-dependents` requires `--auto-scope`/`-A`.")
 
 
 def resolve_resource_dirs(

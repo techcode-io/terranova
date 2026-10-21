@@ -27,8 +27,11 @@ from terranova.commands.helpers import (
     auto_scope_resource_dirs,
     base_option,
     check_base_requires_auto_scope,
+    check_dependents_require_auto_scope,
     complete_resource_path,
     execute_tasks,
+    expand_with_dependents,
+    include_dependents_option,
     parse_execution_plan,
     read_manifests_and_waves,
     resource_dirs,
@@ -100,6 +103,7 @@ class _ApplyTask(TerraformTask):
 )
 @auto_scope_option
 @base_option
+@include_dependents_option
 @click.option(
     "--auto-approve",
     help="Skip interactive approval of plan before applying.",
@@ -135,6 +139,7 @@ def apply(
     path_or_plan: str | None,
     auto_scope: bool,
     base: str | None,
+    include_dependents: bool,
     auto_approve: bool,
     target: str,
     fail_at_end: bool,
@@ -146,6 +151,7 @@ def apply(
     execution_plan: dict[str, str] | None
     paths: list[tuple[Path, str]]
     check_base_requires_auto_scope(auto_scope, base)
+    check_dependents_require_auto_scope(auto_scope, include_dependents)
     if auto_scope and path_or_plan:
         raise click.UsageError(
             "`--auto-scope`/`-A` can't be combined with `path_or_plan`."
@@ -153,6 +159,8 @@ def apply(
     if auto_scope:
         execution_plan = None
         paths = auto_scope_resource_dirs(ctx.conf_dir, ctx.resources_dir, base)
+        if include_dependents:
+            paths = expand_with_dependents(ctx.resources_dir, paths)
     elif path_or_plan and path_or_plan.endswith("tnplan"):
         execution_plan = parse_execution_plan(
             Path(path_or_plan).read_text(Constants.ENCODING_UTF_8)

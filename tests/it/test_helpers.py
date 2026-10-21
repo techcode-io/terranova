@@ -15,6 +15,7 @@ from terranova.commands.helpers import (
     auto_scope_resource_dirs,
     discover_resources,
     engine_versions_in_use,
+    expand_with_dependents,
     extract_import_vars,
     extract_output_var,
     find_all_resource_dirs,
@@ -720,6 +721,48 @@ class TestAutoScopeBaseRefEdgeCases:
     ) -> None:
         with pytest.raises(click.UsageError):
             resolve_resource_dirs(tmp_path, resources_dir, None, False, "")
+
+
+class TestExpandWithDependents:
+    def _repo(self, tmp_path: Path) -> dict[str, Path]:
+        resources = tmp_path / "resources"
+        groups = {
+            "producer": _write_manifest_dir(tmp_path, "resources", "producer"),
+            "consumer": _write_manifest_dir_importing(
+                resources, "consumer", "producer"
+            ),
+            "chained": _write_manifest_dir_importing(resources, "chained", "consumer"),
+            "unrelated": _write_manifest_dir(tmp_path, "resources", "unrelated"),
+        }
+        _init_git_repo(tmp_path)
+        return groups
+
+    @pytest.mark.parametrize(
+        ("changed", "expected"),
+        [
+            ("producer", ["chained", "consumer", "producer"]),
+            ("consumer", ["chained", "consumer"]),
+            ("chained", ["chained"]),
+            ("unrelated", ["unrelated"]),
+        ],
+    )
+    def test_adds_direct_and_transitive_importers_only(
+        self, tmp_path: Path, resources_dir: Path, changed: str, expected: list[str]
+    ) -> None:
+        groups = self._repo(tmp_path)
+        (groups[changed] / "main.tf").write_text('resource "aws_x" "y" {}\n')
+        selected = auto_scope_resource_dirs(tmp_path, resources_dir)
+
+        result = expand_with_dependents(resources_dir, selected)
+
+        assert result == [(groups[name], name) for name in expected]
+
+    def test_no_selected_group_returns_empty_list(
+        self, tmp_path: Path, resources_dir: Path
+    ) -> None:
+        self._repo(tmp_path)
+
+        assert expand_with_dependents(resources_dir, []) == []
 
 
 class TestResolveResourceDirs:

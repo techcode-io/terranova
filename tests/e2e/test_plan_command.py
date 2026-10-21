@@ -278,6 +278,44 @@ def test_plan_base_without_auto_scope_is_usage_error(
     assert "--base" in result.output
 
 
+def test_plan_auto_scope_include_dependents_adds_importing_group(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    fake_terraform_bin.set_stdout("chained-value")
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(PROJECT_TESTS_FIXTURES_DIR / "import_chain", conf_dir)
+    manifest = conf_dir / "resources" / "producer" / "manifest.yml"
+    manifest.write_text(manifest.read_text() + "\n# changed\n")
+
+    scoped = runner.invoke(main, args=["--conf-dir", str(conf_dir), "plan", "-A"])
+    expanded = runner.invoke(
+        main,
+        args=["--conf-dir", str(conf_dir), "plan", "-A", "--include-dependents"],
+    )
+
+    assert scoped.exit_code == 0
+    assert "consumer" not in scoped.stdout
+    assert expanded.exit_code == 0
+    assert "producer" in expanded.stdout
+    assert "consumer" in expanded.stdout
+    assert expanded.stdout.index("producer") < expanded.stdout.index("consumer")
+
+
+def test_plan_include_dependents_without_auto_scope_is_usage_error(
+    runner: CliRunner, fake_terraform_bin: FakeTerraform, tmp_path: Path
+) -> None:
+    _ = fake_terraform_bin
+    conf_dir = tmp_path / "conf"
+    copy_as_git_repo(PROJECT_TESTS_FIXTURES_DIR / "import_chain", conf_dir)
+
+    result = runner.invoke(
+        main, args=["--conf-dir", str(conf_dir), "plan", "--include-dependents"]
+    )
+
+    assert result.exit_code != 0
+    assert "--include-dependents" in result.output
+
+
 def test_plan_strategy_parallel_fail_at_end_stops_next_wave(
     runner: CliRunner, fake_terraform_bin: FakeTerraform
 ) -> None:

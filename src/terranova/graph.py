@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import os
+from collections import defaultdict
 from dataclasses import dataclass, field
 from graphlib import CycleError, TopologicalSorter
 from itertools import pairwise
@@ -95,6 +96,32 @@ def build_dependency_graph(
     return DependencyGraph(
         nodes=nodes, depends_on=depends_on, edge_imports=edge_imports
     )
+
+
+def with_dependents(graph: DependencyGraph, roots: set[str]) -> set[str]:
+    """
+    Expand `roots` with every node that transitively imports from one of them.
+
+    Args:
+        graph: the dependency graph.
+        roots: nodes to start from, all of which are part of the result.
+
+    Returns:
+        `roots` plus all of their direct and indirect dependents.
+    """
+    importers: defaultdict[str, set[str]] = defaultdict(set)
+    for node, sources in graph.depends_on.items():
+        for source in sources:
+            importers[source].add(node)
+
+    found = set(roots)
+    pending = list(roots)
+    while pending:
+        for importer in importers[pending.pop()]:
+            if importer not in found:
+                found.add(importer)
+                pending.append(importer)
+    return found
 
 
 def compute_waves(graph: DependencyGraph) -> list[Wave]:
