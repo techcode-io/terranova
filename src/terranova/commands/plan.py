@@ -26,8 +26,11 @@ from terranova.commands.helpers import (
     TerraformTask,
     auto_scope_option,
     base_option,
+    check_dependents_require_auto_scope,
     complete_resource_path,
     execute_tasks,
+    expand_with_dependents,
+    include_dependents_option,
     read_manifests_and_waves,
     resolve_resource_dirs,
     write_execution_plan,
@@ -114,6 +117,7 @@ class _PlanTask(TerraformTask):
 @click.argument("path", type=str, required=False, shell_complete=complete_resource_path)
 @auto_scope_option
 @base_option
+@include_dependents_option
 @click.option(
     "--input/--no-input",
     help="Ask for input for variables if not directly set.",
@@ -175,6 +179,7 @@ def plan(
     path: str | None,
     auto_scope: bool,
     base: str | None,
+    include_dependents: bool,
     input: bool,
     no_color: bool,
     parallelism: int,
@@ -186,9 +191,12 @@ def plan(
 ) -> None:
     """Show changes required by the current configuration."""
     # Find all resources manifests
+    check_dependents_require_auto_scope(auto_scope, include_dependents)
     paths = resolve_resource_dirs(
         ctx.conf_dir, ctx.resources_dir, path, auto_scope, base
     )
+    if include_dependents:
+        paths = expand_with_dependents(ctx.resources_dir, paths)
 
     # Execution plan
     execution_plan: dict[str, str] = {}

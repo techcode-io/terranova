@@ -7,7 +7,12 @@ from typing import Final
 import pytest
 
 from terranova.exceptions import CyclicImportError
-from terranova.graph import DependencyGraph, build_dependency_graph, compute_waves
+from terranova.graph import (
+    DependencyGraph,
+    build_dependency_graph,
+    compute_waves,
+    with_dependents,
+)
 from terranova.resources import ResourcesManifest
 
 _MANIFEST_NO_IMPORTS: Final[str] = """
@@ -105,6 +110,23 @@ class TestComputeWaves:
     def test_empty_graph_no_waves(self) -> None:
         graph = DependencyGraph(nodes=set(), depends_on={})
         assert compute_waves(graph) == []
+
+
+class TestWithDependents:
+    def test_includes_roots_and_transitive_importers(self) -> None:
+        graph = DependencyGraph(
+            nodes={"a", "b", "c", "d"},
+            depends_on={"a": set(), "b": {"a"}, "c": {"b"}, "d": set()},
+        )
+        assert with_dependents(graph, {"a"}) == {"a", "b", "c"}
+
+    def test_does_not_include_sources_of_a_root(self) -> None:
+        graph = DependencyGraph(nodes={"a", "b"}, depends_on={"a": set(), "b": {"a"}})
+        assert with_dependents(graph, {"b"}) == {"b"}
+
+    def test_no_roots_returns_empty(self) -> None:
+        graph = DependencyGraph(nodes={"a"}, depends_on={"a": set()})
+        assert with_dependents(graph, set()) == set()
 
 
 class TestBuildDependencyGraph:
