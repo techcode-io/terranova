@@ -16,6 +16,7 @@
 #
 import click
 from click.exceptions import Exit
+from proclet import ErrorReturnCode
 
 from terranova.commands.helpers import (
     complete_resource_path,
@@ -32,7 +33,6 @@ from terranova.exceptions import (
     SelfImportNotReadyError,
 )
 from terranova.graph import normalize_rel_path
-from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
 
 

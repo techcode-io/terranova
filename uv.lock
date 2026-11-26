@@ -356,6 +356,15 @@ wheels = [
 ]
 
 [[package]]
+name = "proclet"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/11/398e6d3ff91b79342e7d6661086b6f7c2eee1002ad1ac97c9c62c800d54f/proclet-0.1.1.tar.gz", hash = "sha256:eb0aa89ade9790b062e4522f7928524548aedcd6b48167e6b07a4ee390d32885", size = 33905, upload-time = "2026-11-26T15:21:25.782Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/54/724ebde8d6b9bf04ca938da4f1f3d3074fd07dd2ab981033b80d365fe78a/proclet-0.1.1-py3-none-any.whl", hash = "sha256:8fb3266805a3dc02d3d52ff86f4e3209b24ca555ae5e970c16654a2b39f894e7", size = 31058, upload-time = "2026-11-26T15:21:24.591Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -604,6 +613,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "marshmallow" },
     { name = "mdformat" },
+    { name = "proclet" },
     { name = "pyserde" },
     { name = "rich" },
     { name = "ruamel-yaml" },
@@ -633,6 +643,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "marshmallow", specifier = "==4.3.1" },
     { name = "mdformat", specifier = ">=0.7.22" },
+    { name = "proclet", specifier = ">=0.1.1" },
     { name = "pyserde", specifier = ">=0.32.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruamel-yaml", specifier = ">=0.19.1" },

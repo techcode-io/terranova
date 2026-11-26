@@ -6,8 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import override
 
+from proclet import ErrorReturnCode
+
 from terranova.executor import ParallelExecutor, ResourceGroupTask, SequentialExecutor
-from terranova.process import ErrorReturnCode
 
 
 class _FakeTask(ResourceGroupTask):

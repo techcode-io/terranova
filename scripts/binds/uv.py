@@ -18,8 +18,9 @@ import re
 import sys
 from io import StringIO
 
+from proclet import Bind, CommandNotFound
+
 from scripts.utils import fatal
-from terranova.process import Bind, CommandNotFound
 
 
 class Uv(Bind):
@@ -36,7 +37,7 @@ class Uv(Bind):
         """Return the installed version of a package."""
         capture = StringIO()
         (
-            self._cmd.args("pip", "show", package)
+            self._command("pip", "show", package)
             .stdout(capture)
             .stderr(sys.stderr)
             .exec()
@@ -48,4 +49,4 @@ class Uv(Bind):
 
     def run_poe(self, task: str) -> None:
         """Run a poe task."""
-        self._cmd.args("run", "poe", task).inherit().exec()
+        self._command("run", "poe", task).inherit().exec()

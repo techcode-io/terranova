@@ -18,7 +18,7 @@ Terranova uses a **Command → Bind → Process** architecture:
 2. **Binds** (`src/terranova/binds.py`): Abstraction layer that wraps external tools (mainly Terraform)
    - `Terraform` class: Inherits from `Bind`, wraps terraform CLI
    - `Bind` class: Base abstraction for command execution
-3. **Process** (`src/terranova/process.py`): Low-level process execution and environment management
+3. **Process** ([proclet](https://pypi.org/project/proclet/), external dependency): Low-level process execution and environment management
    - `Command`: Represents a single command execution
    - `Bind`: Base class for tool bindings
 
@@ -41,7 +41,6 @@ src/terranova/
 ├── cli.py              # Main CLI entry point (Click group)
 ├── binds.py           # Terraform binding/wrapper
 ├── resources.py       # Manifest models and validation
-├── process.py         # Process execution abstraction
 ├── exceptions.py      # Custom exceptions
 ├── utils.py           # Logging, context, serde decorator
 ├── io.py              # I/O utilities
@@ -93,10 +92,10 @@ uv run poe test
 uv run poe test:e2e
 
 # Run single test file
-pytest tests/it/test_process.py
+pytest tests/it/test_binds.py
 
 # Run single test
-pytest tests/it/test_process.py::TestCommand::test_empty
+pytest tests/it/test_binds.py::TestClass::test_name
 
 # Run tests matching a pattern
 pytest -k "test_load" -v

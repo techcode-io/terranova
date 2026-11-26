@@ -24,6 +24,7 @@ import click
 from click import Parameter
 from click.exceptions import Exit
 from click.shell_completion import CompletionItem
+from proclet import ErrorReturnCode
 
 from terranova.binds import Git, Terraform
 from terranova.engines import default_engine_manager
@@ -45,7 +46,6 @@ from terranova.graph import (
     normalize_rel_path,
     with_dependents,
 )
-from terranova.process import ErrorReturnCode
 from terranova.resources import Resource, ResourcesFinder, ResourcesManifest, Selector
 from terranova.ui import ParallelProgress
 from terranova.utils import AppContext, Constants, log

@@ -16,8 +16,9 @@
 #
 import os
 
+from proclet import Bind, CommandNotFound
+
 from scripts.utils import fatal
-from terranova.process import Bind, CommandNotFound
 
 
 class PyInstaller(Bind):
@@ -32,7 +33,7 @@ class PyInstaller(Bind):
 
     def build(self, spec: str) -> None:
         """Build binary from a spec file."""
-        self._cmd.args(spec).inherit_out().exec()
+        self._command(spec).inherit_out().exec()
 
     def generate(
         self,
@@ -53,4 +54,4 @@ class PyInstaller(Bind):
             args.extend(["--add-data", f"{src}{os.pathsep}{dst}"])
 
         args.append("./bin/terranova")
-        self._cmd.args(*args).inherit_out().exec()
+        self._command(*args).inherit_out().exec()

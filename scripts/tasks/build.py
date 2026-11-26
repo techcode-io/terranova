@@ -20,9 +20,10 @@ import stat
 from pathlib import Path
 from typing import Final
 
+from proclet import Command
+
 from scripts.binds.pyinstaller import PyInstaller
 from scripts.binds.uv import Uv
-from terranova.process import Command
 
 DIST_DIR: Final[Path] = (Path(__file__).parent.parent.parent / "dist").absolute()
 SPEC_PATH: Final[Path] = Path("terranova.spec")

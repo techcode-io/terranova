@@ -17,6 +17,7 @@
 from typing import override
 
 import click
+from proclet import ErrorReturnCode
 
 from terranova.commands.helpers import (
     TerraformTask,
@@ -30,7 +31,6 @@ from terranova.commands.helpers import (
 )
 from terranova.exceptions import InvalidResourcesError
 from terranova.executor import ResourceGroupTask
-from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
 
 
