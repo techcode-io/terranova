@@ -14,11 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pathlib import Path
-from typing import override
+from proclet import Bind, Command, CommandNotFound, EnvCmd
 
 from scripts.utils import fatal
-from terranova.process import Bind, Command, CommandNotFound, EnvCmd
 
 
 class Container(Bind):
@@ -41,12 +39,8 @@ class Container(Bind):
                 CommandNotFound("docker or podman"),
             )
 
-        self.__backend: str = backend
         super().__init__(backend)
-
-    @override
-    def create(self, cmd_path: str | Path) -> Command:
         env = EnvCmd.inherit()
-        if self.__backend == "podman":
+        if backend == "podman":
             env.add({"BUILDAH_FORMAT": "docker"})
-        return Command(cmd_path).env(env.build())
+        self.env(env.build())

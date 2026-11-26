@@ -21,8 +21,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, override
 
+from proclet import ErrorReturnCode
+
 from terranova.graph import Wave, normalize_rel_path
-from terranova.process import ErrorReturnCode
 
 
 def default_group_concurrency() -> int:

@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from proclet import Bind, CommandNotFound
+
 from scripts.utils import fatal
-from terranova.process import Bind, CommandNotFound
 
 
 class Gh(Bind):
@@ -31,7 +32,7 @@ class Gh(Bind):
     def pr_create(self, base: str, head: str) -> None:
         """Create a pull request, filling title/body from commits."""
         (
-            self._cmd.args("pr", "create", "--fill", f"--base={base}", f"--head={head}")
+            self._command("pr", "create", "--fill", f"--base={base}", f"--head={head}")
             .inherit_out()
             .exec()
         )
@@ -47,4 +48,4 @@ class Gh(Bind):
             version,
             *binaries,
         ]
-        self._cmd.args(*args).inherit_out().exec()
+        self._command(*args).inherit_out().exec()

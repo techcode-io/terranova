@@ -25,6 +25,7 @@ from typing import cast
 
 import yaml
 from marshmallow import ValidationError
+from proclet import Command, PathCmd
 from serde import field, from_dict
 
 from terranova.exceptions import (
@@ -35,7 +36,6 @@ from terranova.exceptions import (
     UnreadableManifestError,
     VersionManifestError,
 )
-from terranova.process import Command, PathCmd
 from terranova.schemas.manifest import MANIFEST_SCHEMAS
 from terranova.utils import Constants, platform_env_vars, serde
 

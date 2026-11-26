@@ -25,17 +25,17 @@ from io import StringIO
 from pathlib import Path
 from typing import Final
 
-from serde import SerdeError, serde
-from serde.json import from_json
-
-from scripts.utils import fatal
-from terranova.process import (
+from proclet import (
     Bind,
     Command,
     CommandNotFound,
     ErrorReturnCode,
     Process,
 )
+from serde import SerdeError, serde
+from serde.json import from_json
+
+from scripts.utils import fatal
 
 # Files under `.devcontainer/` whose content ends up in the container itself (image, lifecycle
 # commands, baked-in scripts), so editing one means the container has to be recreated.
@@ -193,7 +193,7 @@ class DevContainer(Bind):
             remove_existing_container: recreate the container instead of reusing it.
         """
         (
-            self._cmd.args(
+            self._command(
                 "--yes",
                 "@devcontainers/cli",
                 "up",

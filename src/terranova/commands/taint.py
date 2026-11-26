@@ -16,9 +16,9 @@
 #
 import click
 from click.exceptions import Exit
+from proclet import ErrorReturnCode
 
 from terranova.commands.helpers import complete_resource_path, mount_context
-from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext
 
 

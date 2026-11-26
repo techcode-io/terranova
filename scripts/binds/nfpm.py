@@ -23,7 +23,7 @@ class Nfpm(Container):
     def package(self, config: str, target: str, packager: str) -> None:
         """Package a build bundle into an OS package using nfpm."""
         (
-            self._cmd.args(
+            self._command(
                 "run",
                 "--rm",
                 "-v",

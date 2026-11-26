@@ -20,12 +20,13 @@ import json
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
-from typing import Final, cast, override
+from typing import Final, cast
+
+from proclet import Bind, CommandNotFound, EnvCmd, ErrorReturnCode
 
 from terranova.engines import ENGINE_DESCRIPTORS
 from terranova.exceptions import InvalidResourcesError
 from terranova.parser import TfEvent, iter_events
-from terranova.process import Bind, Command, CommandNotFound, EnvCmd, ErrorReturnCode
 from terranova.utils import (
     IS_WINDOWS,
     WINDOWS_INHERIT_ENV_VARS,
@@ -311,7 +312,6 @@ class Terraform(Bind):
         engine_name: str = "terraform",
     ) -> None:
         """Init terraform bind, using `binary` instead of the `PATH` lookup if given."""
-        self.__work_dir = work_dir
         self.__plugin_cache_dir = plugin_cache_dir
         self.__variables = variables
         self.__verbose = verbose
@@ -321,14 +321,15 @@ class Terraform(Bind):
             super().__init__(binary or fallback_binary)
         except CommandNotFound as err:
             log.fatal(f"detect {engine_name} binary", err)
+        self.env(self.__build_env()).cwd(work_dir)
 
         try:
             plugin_cache_dir.mkdir(parents=True, exist_ok=True)
         except OSError as err:
             log.fatal(f"create {engine_name} cache directory", err)
 
-    @override
-    def create(self, cmd_path: str | Path) -> Command:
+    def __build_env(self) -> dict[str, str]:
+        """Build the env vars passed to every terraform operation."""
         inherit_env_vars = (
             "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
             "CLOUDSDK_CORE_PROJECT",
@@ -368,11 +369,7 @@ class Terraform(Bind):
         if self.__verbose:
             additional_env_vars["TF_LOG"] = "DEBUG"
 
-        return (
-            Command(cmd_path)
-            .env(env.add(additional_env_vars).build())
-            .cwd(self.__work_dir)
-        )
+        return env.add(additional_env_vars).build()
 
     def init(
         self,
@@ -395,7 +392,7 @@ class Terraform(Bind):
         if backend_config:
             for key, value in backend_config.items():
                 args.append(f"-backend-config={key}={value}")
-        self._cmd.args(*args).inherit().exec()
+        self._command(*args).inherit().exec()
 
     def validate(self) -> ValidationResult:
         """
@@ -410,7 +407,7 @@ class Terraform(Bind):
         """
         capture = StringIO()
         try:
-            self._cmd.args("validate", "-json").inherit().stdout(capture).exec()
+            self._command("validate", "-json").inherit().stdout(capture).exec()
         except ErrorReturnCode:
             # Invalid configuration exits non-zero but still emits a parseable
             # JSON report on stdout, so don't treat this as fatal here.
@@ -425,7 +422,7 @@ class Terraform(Bind):
 
     def fmt(self) -> None:
         """Reformat your configuration in the standard style."""
-        self._cmd.args("fmt").inherit().exec()
+        self._command("fmt").inherit().exec()
 
     def _render_summary(
         self, rel_path: str, summary: ChangeSummary, quiet: bool
@@ -473,7 +470,7 @@ class Terraform(Bind):
             args.append(f"-out={out.as_posix()}")
         capture = StringIO()
         try:
-            self._cmd.args(*args).stdout(capture).stderr(capture).exec()
+            self._command(*args).stdout(capture).stderr(capture).exec()
         except ErrorReturnCode as err:
             summary = ChangeSummary.parse_failure(capture.getvalue(), err.exit_code)
             self._render_summary(rel_path, summary, quiet)
@@ -520,12 +517,12 @@ class Terraform(Bind):
             args.append(plan)
 
         if interactive:
-            self._cmd.args(*args).inherit().exec()
+            self._command(*args).inherit().exec()
             return ChangeSummary()
 
         capture = StringIO()
         try:
-            self._cmd.args(*args).stdout(capture).stderr(capture).exec()
+            self._command(*args).stdout(capture).stderr(capture).exec()
         except ErrorReturnCode as err:
             summary = ChangeSummary.parse_failure(capture.getvalue(), err.exit_code)
             self._render_summary(rel_path, summary, quiet)
@@ -540,29 +537,29 @@ class Terraform(Bind):
 
     def graph(self) -> None:
         """Generate a Graphviz graph of the steps in an operation."""
-        self._cmd.args("graph").inherit().exec()
+        self._command("graph").inherit().exec()
 
     def taint(self, address: str) -> None:
         """Mark a resource as not fully functional."""
-        self._cmd.args("taint", address).inherit().exec()
+        self._command("taint", address).inherit().exec()
 
     def untaint(self, address: str) -> None:
         """Remove the 'tainted' state from a resource instance."""
-        self._cmd.args("untaint", address).inherit().exec()
+        self._command("untaint", address).inherit().exec()
 
     def output(self, name: str) -> str:
         """Show output values from your root module."""
         capture = StringIO()
-        self._cmd.args("output", "-raw", name).inherit().stdout(capture).exec()
+        self._command("output", "-raw", name).inherit().stdout(capture).exec()
         return capture.getvalue()
 
     def define(self, address: str, identifier: str) -> None:
         """Associate existing infrastructure with a Terraform resource."""
-        self._cmd.args("import", address, identifier).inherit().exec()
+        self._command("import", address, identifier).inherit().exec()
 
     def destroy(self) -> None:
         """Destroy previously-created infrastructure."""
-        self._cmd.args("destroy").inherit().exec()
+        self._command("destroy").inherit().exec()
 
 
 class Git(Bind):
@@ -579,7 +576,7 @@ class Git(Bind):
     def repo_root(self) -> str:
         """Show the absolute path to the top-level of the working tree."""
         capture = StringIO()
-        self._cmd.args("rev-parse", "--show-toplevel").stdout(capture).stderr(
+        self._command("rev-parse", "--show-toplevel").stdout(capture).stderr(
             capture
         ).exec()
         return capture.getvalue().strip()
@@ -589,7 +586,7 @@ class Git(Bind):
         capture = StringIO()
         # `--` keeps a ref that looks like an option from being parsed as one, and
         # stderr is kept out of `capture` so a git warning can't end up in the hash.
-        self._cmd.args("merge-base", "--", ref, "HEAD").stdout(capture).stderr(
+        self._command("merge-base", "--", ref, "HEAD").stdout(capture).stderr(
             StringIO()
         ).exec()
         return capture.getvalue().strip()
@@ -606,13 +603,13 @@ class Git(Bind):
             root first (via `repo_root()`) so output is unambiguous.
         """
         capture = StringIO()
-        self._cmd.args("diff", "--name-only", "--no-renames", base).stdout(
+        self._command("diff", "--name-only", "--no-renames", base).stdout(
             capture
         ).stderr(capture).exec()
         tracked = [line for line in capture.getvalue().splitlines() if line]
 
         capture = StringIO()
-        self._cmd.args(
+        self._command(
             "ls-files", "--others", "--exclude-standard", "--full-name"
         ).stdout(capture).stderr(capture).exec()
         untracked = [line for line in capture.getvalue().splitlines() if line]
@@ -621,11 +618,11 @@ class Git(Bind):
 
     def init(self) -> None:
         """Create an empty git repository - only used to build fixtures in tests."""
-        self._cmd.args("init", "-q").exec()
+        self._command("init", "-q").exec()
 
     def add(self, *paths: str) -> None:
         """Stage `paths` (or everything, if none given) - only used in tests."""
-        self._cmd.args("add", *(paths or ("-A",))).exec()
+        self._command("add", *(paths or ("-A",))).exec()
 
     def commit(self, message: str, *, author: tuple[str, str] | None = None) -> None:
         """
@@ -641,4 +638,4 @@ class Git(Bind):
             name, email = author
             args += ["-c", f"user.name={name}", "-c", f"user.email={email}"]
         args += ["commit", "-q", "-m", message]
-        self._cmd.args(*args).exec()
+        self._command(*args).exec()

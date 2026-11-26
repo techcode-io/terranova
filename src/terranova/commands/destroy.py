@@ -16,6 +16,7 @@
 #
 import click
 from click.exceptions import Exit
+from proclet import ErrorReturnCode
 
 from terranova.commands.helpers import (
     auto_scope_option,
@@ -24,7 +25,6 @@ from terranova.commands.helpers import (
     mount_context,
     resolve_resource_dirs,
 )
-from terranova.process import ErrorReturnCode
 from terranova.utils import AppContext, log
 
 

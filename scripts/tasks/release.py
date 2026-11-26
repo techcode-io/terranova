@@ -20,10 +20,11 @@ import sys
 from pathlib import Path
 from typing import Final
 
+from proclet import ErrorReturnCode
+
 from scripts.binds.gh import Gh
 from scripts.binds.git import Git
 from scripts.binds.uv import Uv
-from terranova.process import ErrorReturnCode
 
 PYPROJECT_PATH: Final[Path] = Path("pyproject.toml")
 TERRANOVA_INIT_PATH: Final[Path] = Path("./src/terranova/__init__.py")

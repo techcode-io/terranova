@@ -16,12 +16,13 @@
 #
 import sys
 
+from proclet import ErrorReturnCode
+
 from scripts.binds.basedpyright import BasedPyright
 from scripts.binds.git import Git
 from scripts.binds.ruff import Ruff
 from scripts.binds.uv import Uv
 from scripts.utils import fatal
-from terranova.process import ErrorReturnCode
 
 
 def check_ruff() -> None:

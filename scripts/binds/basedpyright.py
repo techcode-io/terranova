@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from proclet import Bind, CommandNotFound
+
 from scripts.utils import fatal
-from terranova.process import Bind, CommandNotFound
 
 
 class BasedPyright(Bind):
@@ -35,4 +36,4 @@ class BasedPyright(Bind):
         Raises:
             ErrorReturnCode: if type errors are found.
         """
-        self._cmd.inherit_out().exec()
+        self._command().inherit_out().exec()

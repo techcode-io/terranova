@@ -20,6 +20,7 @@ from typing import Final
 
 import click
 from click.exceptions import Exit
+from proclet import ErrorReturnCode
 
 from terranova.commands.helpers import (
     complete_resource_path,
@@ -28,7 +29,6 @@ from terranova.commands.helpers import (
     resource_dirs,
 )
 from terranova.exceptions import ExplainedError
-from terranova.process import ErrorReturnCode
 from terranova.utils import IS_WINDOWS, AppContext, log
 
 _WINDOWS_SYMLINK_HINT: Final[str] = (

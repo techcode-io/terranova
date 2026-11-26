@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from proclet import Bind, CommandNotFound
+
 from scripts.utils import fatal
-from terranova.process import Bind, CommandNotFound
 
 
 class Ruff(Bind):
@@ -35,4 +36,4 @@ class Ruff(Bind):
         Raises:
             ErrorReturnCode: if lint violations are found.
         """
-        self._cmd.args("check", path).inherit_out().exec()
+        self._command("check", path).inherit_out().exec()
